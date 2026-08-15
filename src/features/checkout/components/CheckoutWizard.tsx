@@ -165,11 +165,16 @@ export function CheckoutWizard({ initialPlanId }: { initialPlanId?: string }) {
 
   async function pay() {
     if (!effectivePlanId || !selectedAddressId) return;
-    if (!state.foodPreference || state.mealTypes.length === 0) {
+    if (
+      !state.foodPreference ||
+      state.mealTypes.length === 0 ||
+      !state.healthGoal
+    ) {
       dispatch(
         addToast({
           title: "Complete your details",
-          description: "Choose food preference and meals before paying.",
+          description:
+            "Choose food preference, meals, and a health goal before paying.",
           variant: "warning",
         }),
       );
@@ -246,6 +251,10 @@ export function CheckoutWizard({ initialPlanId }: { initialPlanId?: string }) {
     voucherCode: state.voucherApplied ? state.voucherCode : undefined,
     durationKind: state.durationKind,
     startDate: state.startDate,
+    foodPreference: state.foodPreference,
+    mealTypes: state.mealTypes,
+    healthGoal: state.healthGoal,
+    allergies: state.allergies,
   };
 
   return (
@@ -344,11 +353,14 @@ export function CheckoutWizard({ initialPlanId }: { initialPlanId?: string }) {
                   !state.mobile ||
                   !state.foodPreference ||
                   state.mealTypes.length === 0 ||
-                  !state.startDate
+                  !state.startDate ||
+                  !state.healthGoal
                 ) {
                   dispatch(
                     addToast({
                       title: "Fill the required details",
+                      description:
+                        "Food preference, meals, start date, and health goal are required.",
                       variant: "warning",
                     }),
                   );
@@ -568,7 +580,8 @@ function StepDetails({
           Your details
         </h2>
         <p className="text-brand-muted mt-1 text-sm">
-          Same questions we used to ask on WhatsApp — now in one calm form.
+          Food preference, meals, start date, allergies, and health goal — so
+          kitchen packs the right veg or non-veg plate.
         </p>
       </div>
 
@@ -593,7 +606,7 @@ function StepDetails({
         />
       </Field>
 
-      <Field label="Food preference">
+      <Field label="Food preference" required>
         <Select
           value={state.foodPreference}
           onChange={(event) =>
@@ -611,7 +624,13 @@ function StepDetails({
       </Field>
 
       <div>
-        <Label>Meals required</Label>
+        <Label>
+          Meals required <span className="text-brand-danger">*</span>
+        </Label>
+        <p className="text-brand-muted mt-1 text-xs">
+          Kitchen packs veg or non-veg for each selected meal from that day’s
+          menu.
+        </p>
         <div className="mt-2 flex flex-wrap gap-2">
           {allowedMeals.map((meal) => {
             const on = selectedMeals.includes(meal);
@@ -684,7 +703,7 @@ function StepDetails({
         </div>
       </div>
 
-      <Field label="Start date">
+      <Field label="Start date" required>
         <Input
           type="date"
           value={state.startDate}
@@ -697,18 +716,18 @@ function StepDetails({
           rows={2}
           value={state.allergies}
           onChange={(event) => onChange({ allergies: event.target.value })}
-          placeholder="Peanuts, dairy…"
+          placeholder="Peanuts, dairy, or write None"
         />
       </Field>
 
-      <Field label="Health goal">
+      <Field label="Health goal" required>
         <Select
           value={state.healthGoal}
           onChange={(event) =>
             onChange({ healthGoal: event.target.value as HealthGoal })
           }
         >
-          <option value="">Optional</option>
+          <option value="">Select a goal</option>
           <option value={HealthGoal.WEIGHT_LOSS}>Weight loss</option>
           <option value={HealthGoal.WEIGHT_GAIN}>Weight gain</option>
           <option value={HealthGoal.FITNESS}>Fitness</option>
@@ -733,14 +752,19 @@ function StepDetails({
 
 function Field({
   label,
+  required,
   children,
 }: {
   label: string;
+  required?: boolean;
   children: React.ReactNode;
 }) {
   return (
     <div className="space-y-1.5">
-      <Label>{label}</Label>
+      <Label>
+        {label}
+        {required ? <span className="text-brand-danger"> *</span> : null}
+      </Label>
       {children}
     </div>
   );

@@ -11,12 +11,21 @@ import {
 } from "@/components/states";
 import { PageHeader } from "@/portals/customer/components/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { useCustomerDashboard } from "@/features/dashboard/hooks/useCustomerDashboard";
+import { Badge } from "@/components/ui/badge";
+import {
+  useCustomer,
+  useCustomerDashboard,
+} from "@/features/dashboard/hooks/useCustomerDashboard";
 import { useSubscriptions } from "@/features/subscriptions/hooks/useSubscriptions";
 import { MealType, SubscriptionStatus } from "@/types/enums";
+import { useAppSelector } from "@/store/hooks";
+import { menuItemForPreference } from "@/lib/meals/menuByPreference";
+import { formatFoodPreference, MEAL_TYPE_LABELS } from "@/lib/meals/labels";
 
 export default function CustomerMenuPage() {
+  const user = useAppSelector((state) => state.auth.user);
   const dashboard = useCustomerDashboard();
+  const customerQuery = useCustomer(user?.id);
   const subscriptions = useSubscriptions({ pageSize: 20 });
   const date = toDateOnly(new Date());
   const menusQuery = useQuery({
@@ -29,7 +38,7 @@ export default function CustomerMenuPage() {
   );
   const hasSub = Boolean(dashboard.data?.data.activeSubscription ?? active);
 
-  if (dashboard.isLoading || menusQuery.isLoading) {
+  if (dashboard.isLoading || menusQuery.isLoading || customerQuery.isLoading) {
     return <LoadingState title="Loading today’s menu" />;
   }
 
@@ -46,11 +55,12 @@ export default function CustomerMenuPage() {
     return <ErrorState title="Could not load the menu" />;
   }
 
+  const preference = customerQuery.data?.data.preferences?.foodPreference;
   const menu = menusQuery.data?.data[0];
   const slots: Array<{ type: MealType; label: string }> = [
-    { type: MealType.BREAKFAST, label: "Breakfast" },
-    { type: MealType.LUNCH, label: "Lunch" },
-    { type: MealType.DINNER, label: "Dinner" },
+    { type: MealType.BREAKFAST, label: MEAL_TYPE_LABELS[MealType.BREAKFAST] },
+    { type: MealType.LUNCH, label: MEAL_TYPE_LABELS[MealType.LUNCH] },
+    { type: MealType.DINNER, label: MEAL_TYPE_LABELS[MealType.DINNER] },
   ];
   const opted = active?.mealTypes ?? [
     MealType.BREAKFAST,
@@ -62,7 +72,7 @@ export default function CustomerMenuPage() {
     <div>
       <PageHeader
         title="Today’s menu"
-        description="Published for subscribers. Sundays are rest days for the kitchen."
+        description={`Packed for your diet: ${formatFoodPreference(preference)}. Veg, vegan, and eggetarian get the veg line; non-veg gets the non-veg line.`}
       />
       {!menu ? (
         <EmptyState title="No menu published for today yet" />
@@ -71,16 +81,23 @@ export default function CustomerMenuPage() {
           {slots
             .filter((slot) => opted.includes(slot.type))
             .map((slot) => {
-              const item =
+              const item = menuItemForPreference(
                 slot.type === MealType.BREAKFAST
                   ? menu.breakfast
                   : slot.type === MealType.LUNCH
                     ? menu.lunch
-                    : menu.dinner;
+                    : menu.dinner,
+                preference,
+              );
               return (
                 <Card key={slot.type}>
                   <CardHeader>
-                    <CardTitle>{slot.label}</CardTitle>
+                    <CardTitle className="flex items-center justify-between gap-2">
+                      {slot.label}
+                      <Badge variant="muted">
+                        {formatFoodPreference(preference)}
+                      </Badge>
+                    </CardTitle>
                   </CardHeader>
                   <CardContent>
                     <p className="font-display text-brand-navy text-xl">

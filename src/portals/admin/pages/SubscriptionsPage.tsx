@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { PageHeader, StatusBadge } from "@/portals/admin/components/AdminUi";
 import { formatCurrency, formatDate } from "@/lib/utils/format";
+import { formatMealTypes } from "@/lib/meals/labels";
 import type { Subscription } from "@/types/entities";
 import { SubscriptionStatus } from "@/types/enums";
 
@@ -111,8 +112,13 @@ export function SubscriptionsListPage() {
         cell: (row) => <StatusBadge status={row.status} />,
       },
       {
+        id: "meals",
+        header: "Meals",
+        cell: (row) => formatMealTypes(row.mealTypes),
+      },
+      {
         id: "period",
-        header: "Period",
+        header: "Start → end",
         cell: (row) =>
           `${formatDate(row.startDate)} → ${formatDate(row.endDate)}`,
       },

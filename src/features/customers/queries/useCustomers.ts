@@ -1,9 +1,10 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   customerService,
   type CustomerListParams,
+  type UpdateCustomerInput,
 } from "@/features/customers/services/customerService";
 
 export const customerKeys = {
@@ -30,5 +31,20 @@ export function useCustomer(id: string, enabled = true) {
       return res.data;
     },
     enabled: Boolean(id) && enabled,
+  });
+}
+
+export function useUpdateCustomer() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: UpdateCustomerInput }) =>
+      customerService.update(id, input),
+    onSuccess: (_data, variables) => {
+      void queryClient.invalidateQueries({ queryKey: customerKeys.all });
+      void queryClient.invalidateQueries({
+        queryKey: customerKeys.detail(variables.id),
+      });
+      void queryClient.invalidateQueries({ queryKey: ["kitchen"] });
+    },
   });
 }

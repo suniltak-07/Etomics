@@ -6,18 +6,27 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState, ErrorState, LoadingState } from "@/components/states";
-import { useCustomerDashboard } from "@/features/dashboard/hooks/useCustomerDashboard";
-import { useNotifications } from "@/features/dashboard/hooks/useCustomerDashboard";
+import {
+  useCustomer,
+  useCustomerDashboard,
+  useNotifications,
+} from "@/features/dashboard/hooks/useCustomerDashboard";
 import { usePlan } from "@/features/plans/hooks/usePlans";
 import { PageHeader } from "@/portals/customer/components/PageHeader";
 import { useAppSelector } from "@/store/hooks";
 import { formatCurrency, formatDate } from "@/lib/utils/format";
+import {
+  formatFoodPreference,
+  formatHealthGoal,
+  formatMealTypes,
+} from "@/lib/meals/labels";
 import { subscriptionBadgeVariant } from "@/lib/utils/statusBadges";
 
 export default function CustomerDashboardPage() {
   const user = useAppSelector((state) => state.auth.user);
   const dashboardQuery = useCustomerDashboard();
   const notificationsQuery = useNotifications({ pageSize: 5 });
+  const customerQuery = useCustomer(user?.id);
   const activeSub = dashboardQuery.data?.data.activeSubscription ?? null;
   const planQuery = usePlan(activeSub?.planId);
 
@@ -107,8 +116,8 @@ export default function CustomerDashboardPage() {
           <CardContent className="grid gap-1.5">
             {[
               {
-                href: "/customer/plans",
-                label: "Browse plans",
+                href: "/customer/menu",
+                label: "Today’s menu",
                 icon: UtensilsCrossed,
               },
               {
@@ -144,6 +153,53 @@ export default function CustomerDashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      <section className="mt-8">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between gap-3">
+            <CardTitle className="font-display text-xl">
+              Diet & wellness
+            </CardTitle>
+            <Link
+              href="/customer/profile"
+              className="text-brand-green text-sm font-medium"
+            >
+              Update
+            </Link>
+          </CardHeader>
+          <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <WellnessItem
+              label="Food preference"
+              value={formatFoodPreference(
+                customerQuery.data?.data.preferences?.foodPreference,
+              )}
+            />
+            <WellnessItem
+              label="Meals required"
+              value={formatMealTypes(activeSub?.mealTypes)}
+            />
+            <WellnessItem
+              label="Start date"
+              value={
+                activeSub?.startDate ? formatDate(activeSub.startDate) : "—"
+              }
+            />
+            <WellnessItem
+              label="Health goal"
+              value={formatHealthGoal(
+                customerQuery.data?.data.preferences?.healthGoal,
+              )}
+            />
+            <WellnessItem
+              label="Allergies / avoid"
+              value={
+                customerQuery.data?.data.preferences?.allergies?.join(", ") ||
+                "None noted"
+              }
+            />
+          </CardContent>
+        </Card>
+      </section>
 
       <section className="mt-10">
         <div className="mb-4 flex items-center justify-between">
@@ -189,6 +245,17 @@ export default function CustomerDashboardPage() {
           </ul>
         )}
       </section>
+    </div>
+  );
+}
+
+function WellnessItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-brand-muted text-xs tracking-wide uppercase">
+        {label}
+      </p>
+      <p className="text-brand-navy mt-1 text-sm font-medium">{value}</p>
     </div>
   );
 }

@@ -25,22 +25,47 @@ import { FoodPreference, HealthGoal } from "@/types/enums";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
-const profileSchema = z.object({
-  firstName: z.string().min(1, "First name is required").max(80),
-  lastName: z.string().min(1, "Last name is required").max(80),
-  mobile: z
-    .string()
-    .min(8, "Enter a valid mobile")
-    .max(20)
-    .optional()
-    .or(z.literal("")),
-  dateOfBirth: z.string().optional(),
-  foodPreference: z.nativeEnum(FoodPreference).optional().or(z.literal("")),
-  allergies: z.string().optional(),
-  healthGoal: z.nativeEnum(HealthGoal).optional().or(z.literal("")),
-});
+type ProfileFormValues = {
+  firstName: string;
+  lastName: string;
+  mobile?: string;
+  dateOfBirth?: string;
+  foodPreference: FoodPreference | "";
+  allergies?: string;
+  healthGoal: HealthGoal | "";
+};
 
-type ProfileFormValues = z.infer<typeof profileSchema>;
+const profileSchema = z
+  .object({
+    firstName: z.string().min(1, "First name is required").max(80),
+    lastName: z.string().min(1, "Last name is required").max(80),
+    mobile: z
+      .string()
+      .min(8, "Enter a valid mobile")
+      .max(20)
+      .optional()
+      .or(z.literal("")),
+    dateOfBirth: z.string().optional(),
+    foodPreference: z.union([z.nativeEnum(FoodPreference), z.literal("")]),
+    allergies: z.string().optional(),
+    healthGoal: z.union([z.nativeEnum(HealthGoal), z.literal("")]),
+  })
+  .superRefine((values, ctx) => {
+    if (!values.foodPreference) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["foodPreference"],
+        message: "Select a food preference",
+      });
+    }
+    if (!values.healthGoal) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["healthGoal"],
+        message: "Select a health goal",
+      });
+    }
+  });
 
 export default function CustomerProfilePage() {
   const user = useAppSelector((state) => state.auth.user);
@@ -151,7 +176,7 @@ export default function CustomerProfilePage() {
     <div className="animate-[fade-up_0.5s_ease-out]">
       <PageHeader
         title="Profile"
-        description="Keep your personal details up to date for deliveries and account recovery."
+        description="Tell us diet, allergies, and health goal so kitchen packs the right plate."
       />
 
       <Card className="max-w-2xl">
@@ -188,7 +213,10 @@ export default function CustomerProfilePage() {
                 <Input type="date" {...form.register("dateOfBirth")} />
               </Field>
             </div>
-            <Field label="Food preference">
+            <Field
+              label="Food preference"
+              error={form.formState.errors.foodPreference?.message}
+            >
               <Select {...form.register("foodPreference")}>
                 <option value="">Select</option>
                 <option value={FoodPreference.VEG}>Veg</option>
@@ -197,9 +225,12 @@ export default function CustomerProfilePage() {
                 <option value={FoodPreference.VEGAN}>Vegan</option>
               </Select>
             </Field>
-            <Field label="Health goal">
+            <Field
+              label="Health goal"
+              error={form.formState.errors.healthGoal?.message}
+            >
               <Select {...form.register("healthGoal")}>
-                <option value="">Optional</option>
+                <option value="">Select a goal</option>
                 <option value={HealthGoal.WEIGHT_LOSS}>Weight loss</option>
                 <option value={HealthGoal.WEIGHT_GAIN}>Weight gain</option>
                 <option value={HealthGoal.FITNESS}>Fitness</option>
@@ -211,8 +242,12 @@ export default function CustomerProfilePage() {
                 </option>
               </Select>
             </Field>
-            <Field label="Allergies">
-              <Textarea rows={2} {...form.register("allergies")} />
+            <Field label="Allergies or foods to avoid">
+              <Textarea
+                rows={2}
+                placeholder="Peanuts, dairy, or write None"
+                {...form.register("allergies")}
+              />
             </Field>
             <Button type="submit" disabled={updateMutation.isPending}>
               {updateMutation.isPending ? "Saving…" : "Save changes"}

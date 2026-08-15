@@ -12,7 +12,7 @@ import { ErrorState, LoadingState } from "@/components/states";
 import { menuService } from "@/features/menus/services/menuService";
 import { toDateOnly } from "@/lib/calendar/deliveryCalendar";
 import { ApiError } from "@/lib/api/errors";
-import type { DailyMenu } from "@/types/entities";
+import type { DailyMenu, DailyMenuSlot } from "@/types/entities";
 
 export default function AdminMenuPage() {
   const [date, setDate] = useState(toDateOnly(new Date()));
@@ -30,7 +30,7 @@ export default function AdminMenuPage() {
     <div>
       <PageHeader
         title="Daily menu"
-        description="Update breakfast, lunch, and dinner. Only subscribers see the published tab."
+        description="Set a veg line and a non-veg line for breakfast, lunch, and dinner. Packing follows each customer’s food preference."
       />
       <div className="mb-4 max-w-2xl space-y-1.5">
         <Label>Date</Label>
@@ -50,6 +50,22 @@ export default function AdminMenuPage() {
   );
 }
 
+function slotFrom(
+  vegName: string,
+  vegDesc: string,
+  nonVegName: string,
+  nonVegDesc: string,
+): DailyMenuSlot | undefined {
+  const veg = vegName.trim()
+    ? { name: vegName.trim(), description: vegDesc.trim() || undefined }
+    : undefined;
+  const nonVeg = nonVegName.trim()
+    ? { name: nonVegName.trim(), description: nonVegDesc.trim() || undefined }
+    : undefined;
+  if (!veg && !nonVeg) return undefined;
+  return { veg, nonVeg };
+}
+
 function MenuEditor({
   date,
   existing,
@@ -58,19 +74,37 @@ function MenuEditor({
   existing?: DailyMenu;
 }) {
   const queryClient = useQueryClient();
-  const [breakfastName, setBreakfastName] = useState(
-    existing?.breakfast?.name ?? "",
+  const [breakfastVeg, setBreakfastVeg] = useState(
+    existing?.breakfast?.veg?.name ?? "",
   );
-  const [breakfastDesc, setBreakfastDesc] = useState(
-    existing?.breakfast?.description ?? "",
+  const [breakfastVegDesc, setBreakfastVegDesc] = useState(
+    existing?.breakfast?.veg?.description ?? "",
   );
-  const [lunchName, setLunchName] = useState(existing?.lunch?.name ?? "");
-  const [lunchDesc, setLunchDesc] = useState(
-    existing?.lunch?.description ?? "",
+  const [breakfastNonVeg, setBreakfastNonVeg] = useState(
+    existing?.breakfast?.nonVeg?.name ?? "",
   );
-  const [dinnerName, setDinnerName] = useState(existing?.dinner?.name ?? "");
-  const [dinnerDesc, setDinnerDesc] = useState(
-    existing?.dinner?.description ?? "",
+  const [breakfastNonVegDesc, setBreakfastNonVegDesc] = useState(
+    existing?.breakfast?.nonVeg?.description ?? "",
+  );
+  const [lunchVeg, setLunchVeg] = useState(existing?.lunch?.veg?.name ?? "");
+  const [lunchVegDesc, setLunchVegDesc] = useState(
+    existing?.lunch?.veg?.description ?? "",
+  );
+  const [lunchNonVeg, setLunchNonVeg] = useState(
+    existing?.lunch?.nonVeg?.name ?? "",
+  );
+  const [lunchNonVegDesc, setLunchNonVegDesc] = useState(
+    existing?.lunch?.nonVeg?.description ?? "",
+  );
+  const [dinnerVeg, setDinnerVeg] = useState(existing?.dinner?.veg?.name ?? "");
+  const [dinnerVegDesc, setDinnerVegDesc] = useState(
+    existing?.dinner?.veg?.description ?? "",
+  );
+  const [dinnerNonVeg, setDinnerNonVeg] = useState(
+    existing?.dinner?.nonVeg?.name ?? "",
+  );
+  const [dinnerNonVegDesc, setDinnerNonVegDesc] = useState(
+    existing?.dinner?.nonVeg?.description ?? "",
   );
   const [published, setPublished] = useState(existing?.published ?? true);
 
@@ -79,50 +113,67 @@ function MenuEditor({
       menuService.save({
         date,
         published,
-        breakfast: breakfastName
-          ? { name: breakfastName, description: breakfastDesc }
-          : undefined,
-        lunch: lunchName
-          ? { name: lunchName, description: lunchDesc }
-          : undefined,
-        dinner: dinnerName
-          ? { name: dinnerName, description: dinnerDesc }
-          : undefined,
+        breakfast: slotFrom(
+          breakfastVeg,
+          breakfastVegDesc,
+          breakfastNonVeg,
+          breakfastNonVegDesc,
+        ),
+        lunch: slotFrom(lunchVeg, lunchVegDesc, lunchNonVeg, lunchNonVegDesc),
+        dinner: slotFrom(
+          dinnerVeg,
+          dinnerVegDesc,
+          dinnerNonVeg,
+          dinnerNonVegDesc,
+        ),
       }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["admin-menus"] });
       void queryClient.invalidateQueries({ queryKey: ["menus"] });
+      void queryClient.invalidateQueries({ queryKey: ["kitchen"] });
     },
   });
 
   return (
     <form
-      className="border-brand-border bg-brand-surface max-w-2xl space-y-4 rounded-xl border p-5"
+      className="border-brand-border bg-brand-surface max-w-4xl space-y-4 rounded-xl border p-5"
       onSubmit={(event) => {
         event.preventDefault();
         save.mutate();
       }}
     >
-      <MealFields
+      <MealSlotFields
         title="Breakfast"
-        name={breakfastName}
-        description={breakfastDesc}
-        onName={setBreakfastName}
-        onDescription={setBreakfastDesc}
+        vegName={breakfastVeg}
+        vegDescription={breakfastVegDesc}
+        nonVegName={breakfastNonVeg}
+        nonVegDescription={breakfastNonVegDesc}
+        onVegName={setBreakfastVeg}
+        onVegDescription={setBreakfastVegDesc}
+        onNonVegName={setBreakfastNonVeg}
+        onNonVegDescription={setBreakfastNonVegDesc}
       />
-      <MealFields
+      <MealSlotFields
         title="Lunch"
-        name={lunchName}
-        description={lunchDesc}
-        onName={setLunchName}
-        onDescription={setLunchDesc}
+        vegName={lunchVeg}
+        vegDescription={lunchVegDesc}
+        nonVegName={lunchNonVeg}
+        nonVegDescription={lunchNonVegDesc}
+        onVegName={setLunchVeg}
+        onVegDescription={setLunchVegDesc}
+        onNonVegName={setLunchNonVeg}
+        onNonVegDescription={setLunchNonVegDesc}
       />
-      <MealFields
+      <MealSlotFields
         title="Dinner"
-        name={dinnerName}
-        description={dinnerDesc}
-        onName={setDinnerName}
-        onDescription={setDinnerDesc}
+        vegName={dinnerVeg}
+        vegDescription={dinnerVegDesc}
+        nonVegName={dinnerNonVeg}
+        nonVegDescription={dinnerNonVegDesc}
+        onVegName={setDinnerVeg}
+        onVegDescription={setDinnerVegDesc}
+        onNonVegName={setDinnerNonVeg}
+        onNonVegDescription={setDinnerNonVegDesc}
       />
       <label className="flex items-center gap-2 text-sm">
         <Checkbox
@@ -143,33 +194,64 @@ function MenuEditor({
   );
 }
 
-function MealFields({
+function MealSlotFields({
   title,
-  name,
-  description,
-  onName,
-  onDescription,
+  vegName,
+  vegDescription,
+  nonVegName,
+  nonVegDescription,
+  onVegName,
+  onVegDescription,
+  onNonVegName,
+  onNonVegDescription,
 }: {
   title: string;
-  name: string;
-  description: string;
-  onName: (value: string) => void;
-  onDescription: (value: string) => void;
+  vegName: string;
+  vegDescription: string;
+  nonVegName: string;
+  nonVegDescription: string;
+  onVegName: (value: string) => void;
+  onVegDescription: (value: string) => void;
+  onNonVegName: (value: string) => void;
+  onNonVegDescription: (value: string) => void;
 }) {
   return (
-    <div className="border-brand-border/70 space-y-2 rounded-xl border p-3">
+    <div className="border-brand-border/70 space-y-3 rounded-xl border p-3">
       <p className="text-brand-navy text-sm font-medium">{title}</p>
-      <Input
-        placeholder={`${title} name`}
-        value={name}
-        onChange={(event) => onName(event.target.value)}
-      />
-      <Textarea
-        rows={2}
-        placeholder="Short description"
-        value={description}
-        onChange={(event) => onDescription(event.target.value)}
-      />
+      <div className="grid gap-3 md:grid-cols-2">
+        <div className="space-y-2">
+          <p className="text-brand-muted text-xs tracking-wide uppercase">
+            Veg line (veg, vegan, eggetarian)
+          </p>
+          <Input
+            placeholder={`${title} veg dish`}
+            value={vegName}
+            onChange={(event) => onVegName(event.target.value)}
+          />
+          <Textarea
+            rows={2}
+            placeholder="Short description"
+            value={vegDescription}
+            onChange={(event) => onVegDescription(event.target.value)}
+          />
+        </div>
+        <div className="space-y-2">
+          <p className="text-brand-muted text-xs tracking-wide uppercase">
+            Non-veg line
+          </p>
+          <Input
+            placeholder={`${title} non-veg dish`}
+            value={nonVegName}
+            onChange={(event) => onNonVegName(event.target.value)}
+          />
+          <Textarea
+            rows={2}
+            placeholder="Short description"
+            value={nonVegDescription}
+            onChange={(event) => onNonVegDescription(event.target.value)}
+          />
+        </div>
+      </div>
     </div>
   );
 }

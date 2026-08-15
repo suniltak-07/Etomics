@@ -2,6 +2,11 @@
 
 import Image from "next/image";
 import { formatCurrency } from "@/lib/utils/format";
+import {
+  formatFoodPreference,
+  formatHealthGoal,
+  formatMealTypes,
+} from "@/lib/meals/labels";
 import type { CheckoutSummaryModel } from "@/features/checkout/schemas/checkoutTypes";
 import { cn } from "@/lib/utils/cn";
 
@@ -63,6 +68,25 @@ export function CheckoutOrderSummary({
           <p className="text-brand-muted">
             {address.addressLine1}, {address.city}
           </p>
+        </div>
+      ) : null}
+
+      {model.foodPreference || model.mealTypes?.length || model.healthGoal ? (
+        <div className="border-brand-border mt-4 space-y-1.5 border-t pt-4 text-sm">
+          <p className="text-brand-muted text-xs tracking-wide uppercase">
+            Kitchen packing
+          </p>
+          {model.foodPreference ? (
+            <p>Diet: {formatFoodPreference(model.foodPreference)}</p>
+          ) : null}
+          {model.mealTypes?.length ? (
+            <p>Meals: {formatMealTypes(model.mealTypes)}</p>
+          ) : null}
+          {model.startDate ? <p>Start: {model.startDate}</p> : null}
+          {model.healthGoal ? (
+            <p>Goal: {formatHealthGoal(model.healthGoal)}</p>
+          ) : null}
+          {model.allergies ? <p>Avoid: {model.allergies}</p> : null}
         </div>
       ) : null}
 

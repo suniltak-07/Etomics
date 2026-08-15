@@ -292,13 +292,19 @@ export interface DailyMenuItem {
   description?: string;
 }
 
+/** Veg and non-veg lines for one meal slot on a given day. */
+export interface DailyMenuSlot {
+  veg?: DailyMenuItem;
+  nonVeg?: DailyMenuItem;
+}
+
 export interface DailyMenu {
   id: string;
   date: string;
   published: boolean;
-  breakfast?: DailyMenuItem;
-  lunch?: DailyMenuItem;
-  dinner?: DailyMenuItem;
+  breakfast?: DailyMenuSlot;
+  lunch?: DailyMenuSlot;
+  dinner?: DailyMenuSlot;
   createdAt: string;
   updatedAt: string;
 }

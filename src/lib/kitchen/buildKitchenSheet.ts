@@ -2,6 +2,10 @@ import type { MealSkip, Subscription } from "@/types/entities";
 import type { MockDb } from "@/mocks/seed";
 import { MealType, SubscriptionStatus } from "@/types/enums";
 import { isSunday, parseDateOnly } from "@/lib/calendar/deliveryCalendar";
+import {
+  menuItemForPreference,
+  packingLineLabel,
+} from "@/lib/meals/menuByPreference";
 
 export interface KitchenSheetRow {
   id: string;
@@ -12,6 +16,8 @@ export interface KitchenSheetRow {
   planId: string;
   planName: string;
   mealTypes: MealType[];
+  packedMeals: Partial<Record<MealType, string>>;
+  packingLine: "VEG" | "NON_VEG";
   foodPreference?: string;
   allergies: string[];
   healthGoal?: string;
@@ -88,6 +94,20 @@ export function buildKitchenSheet(
       )
       .map((skip) => skip.mealType);
 
+    const preference = customer.preferences?.foodPreference;
+    const menu = db.dailyMenus.find((item) => item.date === dateOnly);
+    const packedMeals: Partial<Record<MealType, string>> = {};
+    for (const mealType of due) {
+      const slot =
+        mealType === MealType.BREAKFAST
+          ? menu?.breakfast
+          : mealType === MealType.LUNCH
+            ? menu?.lunch
+            : menu?.dinner;
+      packedMeals[mealType] =
+        menuItemForPreference(slot, preference)?.name ?? "TBA";
+    }
+
     rows.push({
       id: subscription.id,
       subscriptionId: subscription.id,
@@ -97,7 +117,9 @@ export function buildKitchenSheet(
       planId: plan.id,
       planName: plan.name,
       mealTypes: due,
-      foodPreference: customer.preferences?.foodPreference,
+      packedMeals,
+      packingLine: packingLineLabel(preference),
+      foodPreference: preference,
       allergies: customer.preferences?.allergies ?? [],
       healthGoal: customer.preferences?.healthGoal,
       address: [

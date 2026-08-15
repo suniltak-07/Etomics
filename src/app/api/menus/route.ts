@@ -15,23 +15,28 @@ import {
   requirePermission,
 } from "@/lib/api/route-helpers";
 import { SubscriptionStatus, UserRole } from "@/types/enums";
-import type { DailyMenu, DailyMenuItem } from "@/types/entities";
+import type { DailyMenu, DailyMenuSlot } from "@/types/entities";
 
 export const dynamic = "force-dynamic";
 
-const menuItemSchema = z
+const menuItemSchema = z.object({
+  name: z.string().min(1).max(160),
+  description: z.string().max(400).optional(),
+});
+
+const menuSlotSchema = z
   .object({
-    name: z.string().min(1).max(160),
-    description: z.string().max(400).optional(),
+    veg: menuItemSchema.optional(),
+    nonVeg: menuItemSchema.optional(),
   })
   .optional();
 
 const upsertMenuSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   published: z.boolean().optional(),
-  breakfast: menuItemSchema,
-  lunch: menuItemSchema,
-  dinner: menuItemSchema,
+  breakfast: menuSlotSchema,
+  lunch: menuSlotSchema,
+  dinner: menuSlotSchema,
 });
 
 function hasLiveSubscription(customerId: string): boolean {
@@ -100,11 +105,11 @@ export async function PUT(request: NextRequest) {
     date: parsed.data.date,
     published: parsed.data.published ?? existing?.published ?? true,
     breakfast:
-      (parsed.data.breakfast as DailyMenuItem | undefined) ??
+      (parsed.data.breakfast as DailyMenuSlot | undefined) ??
       existing?.breakfast,
-    lunch: (parsed.data.lunch as DailyMenuItem | undefined) ?? existing?.lunch,
+    lunch: (parsed.data.lunch as DailyMenuSlot | undefined) ?? existing?.lunch,
     dinner:
-      (parsed.data.dinner as DailyMenuItem | undefined) ?? existing?.dinner,
+      (parsed.data.dinner as DailyMenuSlot | undefined) ?? existing?.dinner,
     createdAt: existing?.createdAt ?? timestamp,
     updatedAt: timestamp,
   };

@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   useCustomer,
   useCustomers,
+  useUpdateCustomer,
 } from "@/features/customers/queries/useCustomers";
 import { useSubscriptions } from "@/features/subscriptions/queries/useSubscriptions";
 import { usePayments } from "@/features/payments/queries/usePayments";
@@ -18,6 +19,19 @@ import { PageHeader, StatusBadge } from "@/portals/admin/components/AdminUi";
 import { formatCurrency, formatDate } from "@/lib/utils/format";
 import type { PublicCustomer } from "@/features/customers/services/customerService";
 import type { Address, Payment, Subscription } from "@/types/entities";
+import {
+  formatFoodPreference,
+  formatHealthGoal,
+  formatMealTypes,
+} from "@/lib/meals/labels";
+import { FoodPreference, HealthGoal } from "@/types/enums";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { useAppDispatch } from "@/store/hooks";
+import { addToast } from "@/store/slices/uiSlice";
+import { ApiError } from "@/lib/api/errors";
 
 export function CustomersListPage() {
   const [page, setPage] = useState(1);
@@ -48,6 +62,16 @@ export function CustomersListPage() {
         id: "mobile",
         header: "Mobile",
         cell: (row) => row.mobile ?? "—",
+      },
+      {
+        id: "diet",
+        header: "Diet",
+        cell: (row) => formatFoodPreference(row.preferences?.foodPreference),
+      },
+      {
+        id: "goal",
+        header: "Health goal",
+        cell: (row) => formatHealthGoal(row.preferences?.healthGoal),
       },
       {
         id: "status",
@@ -142,8 +166,13 @@ export function CustomerDetailPage({ id }: { id: string }) {
       cell: (row) => <StatusBadge status={row.status} />,
     },
     {
+      id: "meals",
+      header: "Meals",
+      cell: (row) => formatMealTypes(row.mealTypes),
+    },
+    {
       id: "dates",
-      header: "Period",
+      header: "Start → end",
       cell: (row) =>
         `${formatDate(row.startDate)} → ${formatDate(row.endDate)}`,
     },
@@ -257,41 +286,9 @@ export function CustomerDetailPage({ id }: { id: string }) {
             </section>
             <section className="border-brand-border bg-brand-surface rounded-lg border p-4 text-sm">
               <h2 className="text-brand-navy mb-3 text-sm font-semibold">
-                Preferences
+                Food preference & goals
               </h2>
-              {person.preferences ? (
-                <dl className="space-y-2">
-                  <div>
-                    <dt className="text-brand-muted">Food preference</dt>
-                    <dd>{person.preferences.foodPreference ?? "—"}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-brand-muted">Health goal</dt>
-                    <dd>{person.preferences.healthGoal ?? "—"}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-brand-muted">Dietary</dt>
-                    <dd>
-                      {person.preferences.dietaryRestrictions?.join(", ") ||
-                        "—"}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-brand-muted">Allergies</dt>
-                    <dd>{person.preferences.allergies?.join(", ") || "—"}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-brand-muted">Spice</dt>
-                    <dd>{person.preferences.spiceLevel ?? "—"}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-brand-muted">Notes</dt>
-                    <dd>{person.preferences.notes ?? "—"}</dd>
-                  </div>
-                </dl>
-              ) : (
-                <p className="text-brand-muted">No preferences set.</p>
-              )}
+              <CustomerPreferencesEditor customer={person} />
             </section>
           </div>
         ) : null}
@@ -340,5 +337,111 @@ export function CustomerDetailPage({ id }: { id: string }) {
         ) : null}
       </Tabs>
     </div>
+  );
+}
+
+function CustomerPreferencesEditor({ customer }: { customer: PublicCustomer }) {
+  const dispatch = useAppDispatch();
+  const update = useUpdateCustomer();
+  const [foodPreference, setFoodPreference] = useState(
+    customer.preferences?.foodPreference ?? "",
+  );
+  const [healthGoal, setHealthGoal] = useState(
+    customer.preferences?.healthGoal ?? "",
+  );
+  const [allergies, setAllergies] = useState(
+    customer.preferences?.allergies?.join(", ") ?? "",
+  );
+
+  return (
+    <form
+      className="space-y-3"
+      onSubmit={(event) => {
+        event.preventDefault();
+        update.mutate(
+          {
+            id: customer.id,
+            input: {
+              preferences: {
+                foodPreference: foodPreference
+                  ? (foodPreference as FoodPreference)
+                  : undefined,
+                healthGoal: healthGoal ? (healthGoal as HealthGoal) : undefined,
+                allergies: allergies
+                  .split(",")
+                  .map((item) => item.trim())
+                  .filter(Boolean),
+              },
+            },
+          },
+          {
+            onSuccess: () => {
+              dispatch(
+                addToast({
+                  title: "Preferences saved",
+                  variant: "success",
+                }),
+              );
+            },
+            onError: (error) => {
+              dispatch(
+                addToast({
+                  title: "Could not save preferences",
+                  description:
+                    error instanceof ApiError
+                      ? error.message
+                      : "Please try again.",
+                  variant: "danger",
+                }),
+              );
+            },
+          },
+        );
+      }}
+    >
+      <div className="space-y-1.5">
+        <Label>Food preference</Label>
+        <Select
+          value={foodPreference}
+          onChange={(event) => setFoodPreference(event.target.value)}
+        >
+          <option value="">Select</option>
+          <option value={FoodPreference.VEG}>Veg</option>
+          <option value={FoodPreference.NON_VEG}>Non-veg</option>
+          <option value={FoodPreference.EGGETARIAN}>Eggetarian</option>
+          <option value={FoodPreference.VEGAN}>Vegan</option>
+        </Select>
+      </div>
+      <div className="space-y-1.5">
+        <Label>Health goal</Label>
+        <Select
+          value={healthGoal}
+          onChange={(event) => setHealthGoal(event.target.value)}
+        >
+          <option value="">Select</option>
+          <option value={HealthGoal.WEIGHT_LOSS}>Weight loss</option>
+          <option value={HealthGoal.WEIGHT_GAIN}>Weight gain</option>
+          <option value={HealthGoal.FITNESS}>Fitness</option>
+          <option value={HealthGoal.DIABETES_FRIENDLY}>
+            Diabetes-friendly
+          </option>
+          <option value={HealthGoal.HEALTHY_LIFESTYLE}>
+            Healthy lifestyle
+          </option>
+        </Select>
+      </div>
+      <div className="space-y-1.5">
+        <Label>Allergies or foods to avoid</Label>
+        <Textarea
+          rows={2}
+          value={allergies}
+          onChange={(event) => setAllergies(event.target.value)}
+          placeholder="Peanuts, dairy…"
+        />
+      </div>
+      <Button type="submit" size="sm" disabled={update.isPending}>
+        {update.isPending ? "Saving…" : "Save preferences"}
+      </Button>
+    </form>
   );
 }

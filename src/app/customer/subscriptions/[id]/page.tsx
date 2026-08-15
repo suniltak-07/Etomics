@@ -27,6 +27,7 @@ import { PageHeader } from "@/portals/customer/components/PageHeader";
 import { useAppDispatch } from "@/store/hooks";
 import { addToast } from "@/store/slices/uiSlice";
 import { formatCurrency, formatDate } from "@/lib/utils/format";
+import { formatMealTypes } from "@/lib/meals/labels";
 import { subscriptionBadgeVariant } from "@/lib/utils/statusBadges";
 import { SubscriptionStatus } from "@/types/enums";
 import { MealType } from "@/types/enums";
@@ -179,7 +180,10 @@ export default function CustomerSubscriptionDetailPage({
                   : "26 delivery days"
               }
             />
-            <Detail label="Meals opted" value={sub.mealTypes.join(" · ")} />
+            <Detail
+              label="Meals opted"
+              value={formatMealTypes(sub.mealTypes)}
+            />
           </CardContent>
         </Card>
 

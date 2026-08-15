@@ -1106,27 +1106,61 @@ function buildDailyMenus(): DailyMenu[] {
     "2026-08-19",
     "2026-08-20",
   ];
+  const vegBreakfast = ["Millet porridge", "Ragi dosa", "Vegetable upma"];
+  const nonVegBreakfast = [
+    "Egg-white millet scramble",
+    "Chicken sausage millet toast",
+    "Egg white omelette",
+  ];
+  const vegLunch = ["Quinoa bowl", "Millet khichdi", "Paneer millet plate"];
+  const nonVegLunch = [
+    "Grilled chicken bowl",
+    "Fish millet khichdi",
+    "Chicken protein plate",
+  ];
+  const vegDinner = [
+    "Herb paneer plate",
+    "Steamed vegetable supper",
+    "Clear soup with tofu",
+  ];
+  const nonVegDinner = [
+    "Herb grilled fish",
+    "Steamed chicken supper",
+    "Clear chicken soup",
+  ];
   return days.map((date, index) => ({
     id: `menu_${date}`,
     date,
     published: true,
     breakfast: {
-      name: ["Millet porridge", "Egg-white omelette", "Ragi dosa"][index % 3],
-      description: "Gentle spices, no deep fry.",
+      veg: {
+        name: vegBreakfast[index % 3],
+        description: "Plant-based wellness breakfast.",
+      },
+      nonVeg: {
+        name: nonVegBreakfast[index % 3],
+        description: "Non-veg wellness breakfast.",
+      },
     },
     lunch: {
-      name: ["Quinoa bowl", "Millet khichdi", "Grilled protein plate"][
-        index % 3
-      ],
-      description: "Low oil, high fibre.",
+      veg: {
+        name: vegLunch[index % 3],
+        description: "Low oil, high fibre veg lunch.",
+      },
+      nonVeg: {
+        name: nonVegLunch[index % 3],
+        description: "Low oil, high protein non-veg lunch.",
+      },
     },
     dinner: {
-      name: [
-        "Herb grilled plate",
-        "Steamed fish / paneer",
-        "Clear soup supper",
-      ][index % 3],
-      description: "Light evening wellness meal.",
+      veg: {
+        name: vegDinner[index % 3],
+        description: "Light veg evening plate.",
+      },
+      nonVeg: {
+        name: nonVegDinner[index % 3],
+        description: "Light non-veg evening plate.",
+      },
     },
     createdAt: NOW,
     updatedAt: NOW,

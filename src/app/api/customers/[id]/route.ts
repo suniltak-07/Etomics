@@ -82,6 +82,13 @@ export async function PATCH(
     }
   }
 
+  if (body.preferences && typeof body.preferences === "object") {
+    patch.preferences = {
+      ...existing.preferences,
+      ...(body.preferences as Customer["preferences"]),
+    };
+  }
+
   if (isAdminRole(auth.role) && typeof body.isActive === "boolean") {
     patch.isActive = body.isActive;
   }

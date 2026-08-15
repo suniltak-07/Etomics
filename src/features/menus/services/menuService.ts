@@ -1,7 +1,7 @@
 import { api } from "@/lib/api/client";
 import { API_ENDPOINTS } from "@/lib/api/endpoints";
 import type { ApiResponse } from "@/types/api";
-import type { DailyMenu, DailyMenuItem } from "@/types/entities";
+import type { DailyMenu, DailyMenuSlot } from "@/types/entities";
 
 export const menuService = {
   list(date?: string) {
@@ -12,9 +12,9 @@ export const menuService = {
   save(input: {
     date: string;
     published?: boolean;
-    breakfast?: DailyMenuItem;
-    lunch?: DailyMenuItem;
-    dinner?: DailyMenuItem;
+    breakfast?: DailyMenuSlot;
+    lunch?: DailyMenuSlot;
+    dinner?: DailyMenuSlot;
   }) {
     return api.put<ApiResponse<DailyMenu>>(API_ENDPOINTS.menus.list, input);
   },

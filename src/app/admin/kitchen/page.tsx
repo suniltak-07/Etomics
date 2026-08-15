@@ -12,10 +12,16 @@ import { kitchenService } from "@/features/kitchen/services/kitchenService";
 import { toDateOnly } from "@/lib/calendar/deliveryCalendar";
 import type { KitchenSheetRow } from "@/lib/kitchen/buildKitchenSheet";
 import { MealType } from "@/types/enums";
+import {
+  formatFoodPreference,
+  formatHealthGoal,
+  formatMealTypes,
+} from "@/lib/meals/labels";
 
 export default function AdminKitchenPage() {
   const [date, setDate] = useState(toDateOnly(new Date()));
   const [mealType, setMealType] = useState("");
+  const [dietLine, setDietLine] = useState("");
   const query = useQuery({
     queryKey: ["kitchen", date, mealType],
     queryFn: () =>
@@ -25,7 +31,11 @@ export default function AdminKitchenPage() {
       }),
   });
 
-  const rows = query.data?.data.rows ?? [];
+  const rows = useMemo(() => {
+    const all = query.data?.data.rows ?? [];
+    if (!dietLine) return all;
+    return all.filter((row) => row.packingLine === dietLine);
+  }, [query.data, dietLine]);
 
   const columns: DataTableColumn<KitchenSheetRow>[] = useMemo(
     () => [
@@ -35,17 +45,34 @@ export default function AdminKitchenPage() {
       {
         id: "meals",
         header: "Meals",
-        cell: (row) => row.mealTypes.join(", "),
+        cell: (row) => formatMealTypes(row.mealTypes),
+      },
+      {
+        id: "dishes",
+        header: "Dishes",
+        cell: (row) =>
+          row.mealTypes
+            .map(
+              (meal) =>
+                `${formatMealTypes([meal])}: ${row.packedMeals[meal] ?? "TBA"}`,
+            )
+            .join(" · "),
       },
       {
         id: "diet",
         header: "Diet",
-        cell: (row) => row.foodPreference ?? "—",
+        cell: (row) =>
+          `${formatFoodPreference(row.foodPreference)} (${row.packingLine === "NON_VEG" ? "non-veg line" : "veg line"})`,
+      },
+      {
+        id: "goal",
+        header: "Goal",
+        cell: (row) => formatHealthGoal(row.healthGoal),
       },
       {
         id: "allergies",
         header: "Allergies",
-        cell: (row) => row.allergies.join(", ") || "—",
+        cell: (row) => row.allergies.join(", ") || "None noted",
       },
       { id: "address", header: "Address", cell: (row) => row.address },
       { id: "pin", header: "Pin", cell: (row) => row.pincode },
@@ -59,7 +86,10 @@ export default function AdminKitchenPage() {
       "Mobile",
       "Plan",
       "Meals",
+      "Dishes",
       "Diet",
+      "Packing line",
+      "Health goal",
       "Allergies",
       "Address",
       "Pincode",
@@ -72,7 +102,13 @@ export default function AdminKitchenPage() {
           row.mobile ?? "",
           row.planName,
           row.mealTypes.join(" "),
+          `"${row.mealTypes
+            .map((meal) => `${meal}:${row.packedMeals[meal] ?? "TBA"}`)
+            .join(" | ")
+            .replaceAll('"', '""')}"`,
           row.foodPreference ?? "",
+          row.packingLine,
+          row.healthGoal ?? "",
           row.allergies.join(" "),
           `"${row.address.replaceAll('"', '""')}"`,
           row.pincode,
@@ -95,7 +131,7 @@ export default function AdminKitchenPage() {
     <div>
       <PageHeader
         title="Kitchen — daily list"
-        description="Active subscribers with plan, meals, diet, and address for packing."
+        description="Pack veg or non-veg dishes from today’s menu using each customer’s food preference, meals, allergies, and health goal."
         actions={
           <div className="flex flex-wrap gap-2">
             <Button
@@ -127,6 +163,15 @@ export default function AdminKitchenPage() {
           <option value={MealType.BREAKFAST}>Breakfast</option>
           <option value={MealType.LUNCH}>Lunch</option>
           <option value={MealType.DINNER}>Dinner</option>
+        </Select>
+        <Select
+          className="w-44"
+          value={dietLine}
+          onChange={(event) => setDietLine(event.target.value)}
+        >
+          <option value="">All packing lines</option>
+          <option value="VEG">Veg line</option>
+          <option value="NON_VEG">Non-veg line</option>
         </Select>
       </div>
       <DataTable

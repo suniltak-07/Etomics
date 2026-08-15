@@ -45,6 +45,10 @@ export interface CheckoutSummaryModel {
   voucherCode?: string;
   durationKind?: DurationKind;
   startDate?: string;
+  foodPreference?: FoodPreference | "";
+  mealTypes?: MealType[];
+  healthGoal?: HealthGoal | "";
+  allergies?: string;
 }
 
 export type { Subscription };
