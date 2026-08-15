@@ -1,0 +1,13 @@
+.next
+node_modules
+coverage
+out
+build
+dist
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+*.tsbuildinfo
+public
+.vercel
+.husky/_

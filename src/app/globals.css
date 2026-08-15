@@ -1,26 +1,161 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --navy: #0b1f3a;
+  --navy-soft: #14304f;
+  --green: #2d6a4f;
+  --green-light: #40916c;
+  --green-muted: #d8e8df;
+  --sand: #eef1ef;
+  --surface: #ffffff;
+  --ink: #0b1f3a;
+  --muted: #5c6b73;
+  --border: #d5dcd8;
+  --danger: #b42318;
+  --warning: #b54708;
+  --success: #027a48;
+
+  /* Fonts are assigned in layout via next/font CSS variables */
+  --font-family-sans: var(--font-outfit), ui-sans-serif, system-ui, sans-serif;
+  --font-family-display: var(--font-fraunces), ui-serif, Georgia, serif;
+  --font-family-mono:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  --color-brand-navy: var(--navy);
+  --color-brand-navy-soft: var(--navy-soft);
+  --color-brand-green: var(--green);
+  --color-brand-green-light: var(--green-light);
+  --color-brand-green-muted: var(--green-muted);
+  --color-brand-sand: var(--sand);
+  --color-brand-surface: var(--surface);
+  --color-brand-ink: var(--ink);
+  --color-brand-muted: var(--muted);
+  --color-brand-border: var(--border);
+  --color-brand-danger: var(--danger);
+  --color-brand-warning: var(--warning);
+  --color-brand-success: var(--success);
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --font-sans: var(--font-family-sans);
+  --font-display: var(--font-family-display);
+  --font-mono: var(--font-family-mono);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--sand);
+  color: var(--ink);
+  font-family: var(--font-family-sans);
+}
+
+.font-display {
+  font-family: var(--font-family-display);
+}
+
+.font-body {
+  font-family: var(--font-family-sans);
+}
+
+.font-mono {
+  font-family: var(--font-family-mono);
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(1.25rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes hero-ken {
+  from {
+    transform: scale(1.08);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+
+@keyframes soft-bounce {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(4px);
+  }
+}
+
+.animate-fade-up {
+  animation: fade-up 0.7s ease-out both;
+}
+
+.animate-fade-in {
+  animation: fade-in 0.8s ease-out both;
+}
+
+.animate-hero-ken {
+  animation: hero-ken 18s ease-out both;
+}
+
+.animate-soft-bounce {
+  animation: soft-bounce 1.8s ease-in-out infinite;
+}
+
+.animate-delay-100 {
+  animation-delay: 100ms;
+}
+
+.animate-delay-200 {
+  animation-delay: 200ms;
+}
+
+.animate-delay-300 {
+  animation-delay: 300ms;
+}
+
+.animate-delay-400 {
+  animation-delay: 400ms;
+}
+
+.hero-grain {
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 180px 180px;
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #eatomics-card,
+  #eatomics-card * {
+    visibility: visible;
+  }
+  #eatomics-card {
+    position: absolute;
+    inset: 0;
+    box-shadow: none !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-up,
+  .animate-fade-in,
+  .animate-hero-ken,
+  .animate-soft-bounce {
+    animation: none;
+  }
 }

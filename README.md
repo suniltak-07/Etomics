@@ -1,36 +1,134 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# EatOmics
 
-## Getting Started
+Meal subscription platform for wellness-focused meal plans. Customers browse plans, check out with vouchers, and manage subscriptions; admins manage plans, customers, vouchers, payments, and reports.
 
-First, run the development server:
+## Stack
+
+- **Next.js** (App Router) + **React** + **TypeScript**
+- **Tailwind CSS** for styling
+- **Zod** + **React Hook Form** for validation/forms
+- **TanStack Query** + **Redux Toolkit** for client state/data
+- **Vitest** + Testing Library for unit tests
+- **Playwright** for e2e smoke tests
+- In-memory mock data layer (`src/mocks/seed.ts`) for local development
+
+## Getting started
 
 ```bash
+npm install
+npm run prepare   # husky git hooks
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Demo accounts
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Role     | Email                  | Password       |
+| -------- | ---------------------- | -------------- |
+| Admin    | `admin@etomics.com`    | `Admin123!`    |
+| Customer | `customer@etomics.com` | `Customer123!` |
 
-## Learn More
+Passwords are plaintext in the mock seed for local demo only — never use this pattern in production.
 
-To learn more about Next.js, take a look at the following resources:
+## Architecture
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```
+src/
+  app/          # Next.js routes (public, auth, customer, admin)
+  features/     # Domain modules (plans, vouchers, auth, checkout, …)
+  portals/      # Role-specific UI shells and pages (admin, customer)
+  lib/          # Shared utilities (pricing, permissions, auth, api)
+  mocks/        # Seed data + in-memory store
+  components/   # Shared UI primitives
+  store/        # Redux store
+  types/        # Shared entities and enums
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- **`features/`** — domain logic: schemas, services, hooks, feature components
+- **`portals/`** — admin and customer portal layouts, navigation, and page compositions
+- **`lib/`** — cross-cutting concerns such as `pricingEngine`, permissions, session helpers, and API clients
 
-## Deploy on Vercel
+## Scripts
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+| Script                 | Description                          |
+| ---------------------- | ------------------------------------ |
+| `npm run dev`          | Start Next.js development server     |
+| `npm run build`        | Production build                     |
+| `npm run start`        | Start production server              |
+| `npm run lint`         | ESLint                               |
+| `npm run typecheck`    | TypeScript (`tsc --noEmit`)          |
+| `npm test`             | Vitest unit tests (CI-friendly)      |
+| `npm run test:watch`   | Vitest watch mode                    |
+| `npm run test:e2e`     | Playwright e2e (needs `npm run dev`) |
+| `npm run format`       | Prettier write                       |
+| `npm run format:check` | Prettier check                       |
+| `npm run prepare`      | Install Husky hooks                  |
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Pre-commit runs **lint-staged** (Prettier + ESLint on staged files).
+
+## Routes map
+
+### Public
+
+| Path            | Description    |
+| --------------- | -------------- |
+| `/`             | Marketing home |
+| `/plans`        | Plan catalog   |
+| `/plans/[slug]` | Plan detail    |
+| `/about`        | About          |
+| `/contact`      | Contact        |
+
+### Auth
+
+| Path               | Description    |
+| ------------------ | -------------- |
+| `/login`           | Sign in        |
+| `/signup`          | Register       |
+| `/forgot-password` | Password reset |
+
+### Customer
+
+| Path                           | Description            |
+| ------------------------------ | ---------------------- |
+| `/customer`                    | Customer home redirect |
+| `/customer/dashboard`          | Dashboard              |
+| `/customer/plans`              | Browse plans           |
+| `/customer/checkout`           | Checkout wizard        |
+| `/customer/subscriptions`      | My subscriptions       |
+| `/customer/subscriptions/[id]` | Subscription detail    |
+| `/customer/orders`             | Orders                 |
+| `/customer/payments`           | Payments               |
+| `/customer/addresses`          | Delivery addresses     |
+| `/customer/profile`            | Profile                |
+| `/customer/notifications`      | Notifications          |
+| `/customer/settings`           | Settings               |
+
+### Admin
+
+| Path                        | Description          |
+| --------------------------- | -------------------- |
+| `/admin`                    | Admin entry          |
+| `/admin/dashboard`          | Dashboard            |
+| `/admin/plans`              | Plan list            |
+| `/admin/plans/new`          | Create plan          |
+| `/admin/plans/[id]`         | Plan detail          |
+| `/admin/plans/[id]/edit`    | Edit plan            |
+| `/admin/customers`          | Customers            |
+| `/admin/customers/[id]`     | Customer detail      |
+| `/admin/subscriptions`      | Subscriptions        |
+| `/admin/vouchers`           | Vouchers             |
+| `/admin/vouchers/new`       | Create voucher       |
+| `/admin/vouchers/[id]/edit` | Edit voucher         |
+| `/admin/payments`           | Payments             |
+| `/admin/cities`             | Operating cities     |
+| `/admin/pincodes`           | Serviceable pincodes |
+| `/admin/delivery-persons`   | Delivery team        |
+| `/admin/reports`            | Reports              |
+| `/admin/settings`           | Settings             |
+
+### Serviceability
+
+Seeded active cities: **Bengaluru**, **Mumbai**, **Pune**.
+
+Try customer pincodes such as `560038`, `560034`, `400050`, `411057`. Unserviceable example: `999999`.
