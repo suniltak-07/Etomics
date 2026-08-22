@@ -5,16 +5,6 @@ function resource(path: string): string {
 }
 
 export const API_ENDPOINTS = {
-  auth: {
-    login: resource("/auth/login"),
-    signup: resource("/auth/signup"),
-    logout: resource("/auth/logout"),
-    me: resource("/auth/me"),
-    refresh: resource("/auth/refresh"),
-    forgotPassword: resource("/auth/forgot-password"),
-    changePassword: resource("/auth/change-password"),
-    resetPassword: resource("/auth/reset-password"),
-  },
   users: {
     list: resource("/users"),
     detail: (id: string) => resource(`/users/${id}`),

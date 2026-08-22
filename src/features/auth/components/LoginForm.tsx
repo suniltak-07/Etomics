@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
@@ -15,19 +15,30 @@ import {
 import { authService } from "@/features/auth/services/authService";
 import { persistAuthSession } from "@/features/auth/persistSession";
 import { ApiError } from "@/lib/api/errors";
-import { resolvePostLoginPath } from "@/lib/backend/roles";
-import { useAppDispatch } from "@/store/hooks";
-import { setCredentials } from "@/store/slices/authSlice";
+import { splashHref } from "@/lib/auth/splash";
+import {
+  clearLogoutRedirect,
+  isLogoutRedirect,
+} from "@/lib/auth/logout-redirect";
 
 export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const dispatch = useAppDispatch();
   const [formError, setFormError] = useState<string | null>(null);
+  const [fromLogout] = useState(() => isLogoutRedirect());
+
+  useEffect(() => {
+    if (!fromLogout) return;
+    clearLogoutRedirect();
+    if (searchParams.get("returnUrl") || searchParams.get("redirect")) {
+      router.replace("/login");
+    }
+  }, [fromLogout, router, searchParams]);
 
   const redirect = useMemo(() => {
+    if (fromLogout) return null;
     return searchParams.get("returnUrl") ?? searchParams.get("redirect");
-  }, [searchParams]);
+  }, [fromLogout, searchParams]);
 
   const {
     register,
@@ -44,9 +55,7 @@ export function LoginForm() {
       const response = await authService.login(values);
       const { user, token, expiresIn } = response.data;
       persistAuthSession(user, token, expiresIn);
-      dispatch(setCredentials({ user, token }));
-      router.replace(resolvePostLoginPath(user.role, redirect));
-      router.refresh();
+      router.replace(splashHref(redirect));
     } catch (error) {
       setFormError(
         error instanceof ApiError

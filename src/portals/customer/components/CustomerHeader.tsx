@@ -5,11 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronDown, Leaf, LogOut, Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { AUTH_TOKEN_KEY } from "@/lib/api/client";
-import { clearClientSession } from "@/lib/auth/session";
-import { authService } from "@/features/auth/services/authService";
+import { signOutAndGoToLogin } from "@/features/auth/signOut";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
-import { logout } from "@/store/slices/authSlice";
 import { CustomerNav } from "@/portals/customer/components/CustomerNav";
 import { customerSecondaryNav } from "@/portals/customer/navigation/navItems";
 import { cn } from "@/lib/utils/cn";
@@ -45,19 +42,9 @@ export function CustomerHeader() {
   async function handleLogout() {
     setLoggingOut(true);
     try {
-      await authService.logout();
-    } catch {
-      // clear local session regardless
+      await signOutAndGoToLogin(dispatch, (href) => router.replace(href));
     } finally {
-      clearClientSession();
-      try {
-        window.localStorage.removeItem(AUTH_TOKEN_KEY);
-      } catch {
-        // ignore
-      }
-      dispatch(logout());
       setLoggingOut(false);
-      router.replace("/login");
     }
   }
 

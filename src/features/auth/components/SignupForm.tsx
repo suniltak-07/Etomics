@@ -15,13 +15,10 @@ import {
 import { authService } from "@/features/auth/services/authService";
 import { persistAuthSession } from "@/features/auth/persistSession";
 import { ApiError } from "@/lib/api/errors";
-import { portalHomeForRole } from "@/lib/backend/roles";
-import { useAppDispatch } from "@/store/hooks";
-import { setCredentials } from "@/store/slices/authSlice";
+import { splashHref } from "@/lib/auth/splash";
 
 export function SignupForm() {
   const router = useRouter();
-  const dispatch = useAppDispatch();
   const [formError, setFormError] = useState<string | null>(null);
 
   const {
@@ -49,9 +46,7 @@ export function SignupForm() {
       const response = await authService.signup(payload);
       const { user, token, expiresIn } = response.data;
       persistAuthSession(user, token, expiresIn);
-      dispatch(setCredentials({ user, token }));
-      router.replace(portalHomeForRole(user.role));
-      router.refresh();
+      router.replace(splashHref());
     } catch (error) {
       setFormError(
         error instanceof ApiError

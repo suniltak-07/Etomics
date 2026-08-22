@@ -1,5 +1,4 @@
 import { api } from "@/lib/api/client";
-import { API_ENDPOINTS } from "@/lib/api/endpoints";
 import type { ApiResponse } from "@/types/api";
 import type { SessionUser } from "@/lib/auth/session";
 import type {
@@ -18,39 +17,47 @@ export interface AuthSession {
   refreshed?: boolean;
 }
 
+const AUTH_API = {
+  login: "/api/auth/login",
+  signup: "/api/auth/signup",
+  logout: "/api/auth/logout",
+  me: "/api/auth/me",
+  refresh: "/api/auth/refresh",
+  changePassword: "/api/auth/change-password",
+  forgotPassword: "/api/auth/forgot-password",
+} as const;
+
 export const authService = {
   login(input: LoginInput) {
-    return api.post<ApiResponse<AuthSession>>(API_ENDPOINTS.auth.login, input);
+    return api.post<ApiResponse<AuthSession>>(AUTH_API.login, input);
   },
 
   signup(input: SignupInput) {
-    return api.post<ApiResponse<AuthSession>>(API_ENDPOINTS.auth.signup, input);
+    return api.post<ApiResponse<AuthSession>>(AUTH_API.signup, input);
   },
 
   logout() {
-    return api.post<ApiResponse<{ loggedOut: boolean }>>(
-      API_ENDPOINTS.auth.logout,
-    );
+    return api.post<ApiResponse<{ loggedOut: boolean }>>(AUTH_API.logout);
   },
 
   me() {
-    return api.get<ApiResponse<AuthSession>>(API_ENDPOINTS.auth.me);
+    return api.get<ApiResponse<AuthSession>>(AUTH_API.me);
   },
 
   refresh() {
-    return api.post<ApiResponse<AuthSession>>(API_ENDPOINTS.auth.refresh);
+    return api.post<ApiResponse<AuthSession>>(AUTH_API.refresh);
   },
 
   changePassword(input: ChangePasswordInput) {
     return api.post<ApiResponse<{ changed: boolean }>>(
-      API_ENDPOINTS.auth.changePassword,
+      AUTH_API.changePassword,
       input,
     );
   },
 
   forgotPassword(input: ForgotPasswordInput) {
     return api.post<ApiResponse<{ sent: boolean }>>(
-      API_ENDPOINTS.auth.forgotPassword,
+      AUTH_API.forgotPassword,
       input,
     );
   },

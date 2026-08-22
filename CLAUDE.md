@@ -10,5 +10,7 @@ Do **not** write, update, or run tests for this project right now. We will add t
 
 ## Auth roles
 
-- `CUSTOMER` / `ROLE_CUSTOMER` → customer portal (`/customer/dashboard`)
-- `ADMIN` / `ROLE_ADMIN` → admin portal (`/admin/dashboard`)
+- After login/signup and on portal refresh, users go through `/splash`, which calls `/me` once, then routes:
+  - `CUSTOMER` / `ROLE_CUSTOMER` → `/customer/dashboard`
+  - `ADMIN` / `ROLE_ADMIN` → `/admin/dashboard`
+- Do not call `/me` from portal layouts or global providers.
