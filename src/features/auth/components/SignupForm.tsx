@@ -13,15 +13,12 @@ import {
   type SignupInput,
 } from "@/features/auth/schemas/authSchemas";
 import { authService } from "@/features/auth/services/authService";
-import { setClientSession } from "@/lib/auth/session";
+import { persistAuthSession } from "@/features/auth/persistSession";
 import { ApiError } from "@/lib/api/errors";
-import { useAppDispatch } from "@/store/hooks";
-import { setCredentials } from "@/store/slices/authSlice";
-import { UserRole } from "@/types/enums";
+import { splashHref } from "@/lib/auth/splash";
 
 export function SignupForm() {
   const router = useRouter();
-  const dispatch = useAppDispatch();
   const [formError, setFormError] = useState<string | null>(null);
 
   const {
@@ -44,18 +41,12 @@ export function SignupForm() {
     try {
       const payload = {
         ...values,
-        mobile: values.mobile?.trim() ? values.mobile : undefined,
+        mobile: values.mobile?.trim() ? values.mobile.trim() : undefined,
       };
       const response = await authService.signup(payload);
-      const { user, token } = response.data;
-      setClientSession(token, user);
-      dispatch(setCredentials({ user, token }));
-      const destination =
-        user.role === UserRole.ADMIN || user.role === UserRole.SUPER_ADMIN
-          ? "/admin/dashboard"
-          : "/customer/dashboard";
-      router.replace(destination);
-      router.refresh();
+      const { user, token, expiresIn } = response.data;
+      persistAuthSession(user, token, expiresIn);
+      router.replace(splashHref());
     } catch (error) {
       setFormError(
         error instanceof ApiError
@@ -145,7 +136,12 @@ export function SignupForm() {
         />
         {errors.password ? (
           <p className="text-brand-danger text-xs">{errors.password.message}</p>
-        ) : null}
+        ) : (
+          <p className="text-brand-muted text-xs">
+            At least 8 characters, with uppercase, lowercase, a number, and a
+            special character.
+          </p>
+        )}
       </div>
 
       {formError ? (

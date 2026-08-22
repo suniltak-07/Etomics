@@ -5,34 +5,40 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { LoadingState } from "@/components/states";
 import { UserRole } from "@/types/enums";
 import { useAppSelector } from "@/store/hooks";
+import { isLogoutRedirect } from "@/lib/auth/logout-redirect";
+import { getClientToken } from "@/lib/auth/session";
+import { splashHref } from "@/lib/auth/splash";
 
 export function CustomerGuard({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { user, hydrated } = useAppSelector((state) => state.auth);
+  const { user, sessionVerified } = useAppSelector((state) => state.auth);
 
   useEffect(() => {
-    if (!hydrated) return;
-
-    if (!user) {
-      const search = searchParams.toString();
-      const fullPath = search ? `${pathname}?${search}` : pathname;
-      const returnUrl = encodeURIComponent(fullPath || "/customer/dashboard");
-      router.replace(`/login?returnUrl=${returnUrl}`);
+    if (sessionVerified && user) {
+      if (user.role === UserRole.ADMIN || user.role === UserRole.SUPER_ADMIN) {
+        router.replace("/admin/dashboard");
+      }
       return;
     }
 
-    if (user.role === UserRole.ADMIN || user.role === UserRole.SUPER_ADMIN) {
-      router.replace("/admin/dashboard");
+    if (isLogoutRedirect()) {
+      router.replace("/login");
+      return;
     }
-  }, [hydrated, user, router, pathname, searchParams]);
 
-  if (!hydrated) {
-    return <LoadingState title="Loading your account" />;
-  }
+    if (getClientToken()) {
+      const search = searchParams.toString();
+      const fullPath = search ? `${pathname}?${search}` : pathname;
+      router.replace(splashHref(fullPath));
+      return;
+    }
 
-  if (!user || user.role !== UserRole.CUSTOMER) {
+    router.replace("/login");
+  }, [sessionVerified, user, router, pathname, searchParams]);
+
+  if (!sessionVerified || !user || user.role !== UserRole.CUSTOMER) {
     return (
       <LoadingState
         title="Redirecting"

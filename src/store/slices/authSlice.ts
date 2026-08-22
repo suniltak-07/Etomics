@@ -5,6 +5,7 @@ export interface AuthState {
   user: SessionUser | null;
   token: string | null;
   hydrated: boolean;
+  sessionVerified: boolean;
 }
 
 export interface AuthCredentials {
@@ -16,6 +17,7 @@ const initialState: AuthState = {
   user: null,
   token: null,
   hydrated: false,
+  sessionVerified: false,
 };
 
 const authSlice = createSlice({
@@ -26,11 +28,13 @@ const authSlice = createSlice({
       state.user = action.payload.user;
       state.token = action.payload.token;
       state.hydrated = true;
+      state.sessionVerified = true;
     },
     logout(state) {
       state.user = null;
       state.token = null;
       state.hydrated = true;
+      state.sessionVerified = false;
     },
     hydrate(
       state,
@@ -39,6 +43,7 @@ const authSlice = createSlice({
       state.user = action.payload.user;
       state.token = action.payload.token;
       state.hydrated = true;
+      state.sessionVerified = false;
     },
   },
 });

@@ -13,9 +13,14 @@ import {
   findUserByEmail,
   findUserById,
   getDb,
+  seedMeta,
 } from "@/mocks/seed";
 import { hasPermission, type Permission } from "@/lib/permissions/permissions";
 import { ErrorCode, type HttpStatusCode } from "@/lib/api/errors";
+import {
+  collectBackendRoles,
+  mapBackendRolesToUserRole,
+} from "@/lib/backend/roles";
 
 export type PublicUser = Omit<User, "password">;
 
@@ -118,6 +123,58 @@ function userFromLegacyToken(token: string): User | null {
   }
 }
 
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  const parts = token.split(".");
+  if (parts.length < 2) return null;
+  try {
+    const padded = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const json = Buffer.from(padded, "base64").toString("utf8");
+    const parsed = JSON.parse(json) as unknown;
+    if (!parsed || typeof parsed !== "object") return null;
+    return parsed as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Map an OFOOD access JWT onto the in-memory mock user for dummy APIs.
+ * Admin tokens use the seeded admin; customer tokens use the seeded customer
+ * unless the JWT email already exists in the mock store.
+ */
+function userFromOfoodAccessToken(token: string): PublicUser | null {
+  const payload = decodeJwtPayload(token);
+  if (!payload) return null;
+
+  const exp = payload.exp;
+  if (typeof exp === "number" && exp * 1000 < Date.now()) return null;
+
+  const rawRoles = Array.isArray(payload.roles)
+    ? payload.roles.filter((item): item is string => typeof item === "string")
+    : undefined;
+  const role = mapBackendRolesToUserRole(
+    collectBackendRoles(
+      rawRoles,
+      typeof payload.role === "string" ? payload.role : undefined,
+    ),
+  );
+  if (!role) return null;
+
+  const email = typeof payload.email === "string" ? payload.email : undefined;
+  if (email) {
+    const byEmail = findUserByEmail(email);
+    if (byEmail?.isActive) return stripPassword(byEmail);
+  }
+
+  const seedEmail =
+    role === UserRole.ADMIN || role === UserRole.SUPER_ADMIN
+      ? seedMeta.adminEmail
+      : seedMeta.customerEmail;
+  const seeded = findUserByEmail(seedEmail);
+  if (!seeded?.isActive) return null;
+  return stripPassword(seeded);
+}
+
 export function getAuthUser(request: Request): PublicUser | null {
   const token = extractBearerToken(request);
   if (!token) return null;
@@ -138,8 +195,9 @@ export function getAuthUser(request: Request): PublicUser | null {
   }
 
   const legacy = userFromLegacyToken(token);
-  if (!legacy || !legacy.isActive) return null;
-  return stripPassword(legacy);
+  if (legacy?.isActive) return stripPassword(legacy);
+
+  return userFromOfoodAccessToken(token);
 }
 
 export function requireAuth(

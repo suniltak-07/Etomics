@@ -4,11 +4,8 @@ import { useRouter } from "next/navigation";
 import { LogOut, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { AUTH_TOKEN_KEY } from "@/lib/api/client";
-import { clearClientSession } from "@/lib/auth/session";
-import { authService } from "@/features/auth/services/authService";
+import { signOutAndGoToLogin } from "@/features/auth/signOut";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
-import { logout } from "@/store/slices/authSlice";
 
 export function AdminHeader() {
   const user = useAppSelector((state) => state.auth.user);
@@ -16,19 +13,7 @@ export function AdminHeader() {
   const router = useRouter();
 
   const handleLogout = async () => {
-    try {
-      await authService.logout();
-    } catch {
-      // still clear local session
-    }
-    clearClientSession();
-    try {
-      window.localStorage.removeItem(AUTH_TOKEN_KEY);
-    } catch {
-      // ignore
-    }
-    dispatch(logout());
-    router.replace("/login");
+    await signOutAndGoToLogin(dispatch, (href) => router.replace(href));
   };
 
   const displayName = user

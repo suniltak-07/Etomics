@@ -1,18 +1,14 @@
 import type { NextRequest } from "next/server";
-import { createSession, findUserByEmail, mutate } from "@/mocks/seed";
 import {
-  createId,
   isErrorResponse,
   jsonError,
-  jsonOk,
-  nowIso,
   parseJsonBody,
-  stripPassword,
 } from "@/lib/api/route-helpers";
-import { signupSchema } from "@/features/auth/schemas/authSchemas";
-import { UserRole } from "@/types/enums";
-import type { Customer, User } from "@/types/entities";
 import { ErrorCode } from "@/lib/api/errors";
+import { signupSchema } from "@/features/auth/schemas/authSchemas";
+import { ofoodErrorResponse, ofoodFetch } from "@/lib/backend/proxy";
+import { jsonAuthOk, loginWithOfood } from "@/lib/backend/session";
+import type { OfoodRegistrationResponse } from "@/lib/backend/types";
 
 export const dynamic = "force-dynamic";
 
@@ -27,48 +23,40 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  if (findUserByEmail(parsed.data.email)) {
-    return jsonError("Email already registered", 409, ErrorCode.CONFLICT);
+  const { email, password, firstName, lastName, mobile } = parsed.data;
+  const register = await ofoodFetch<OfoodRegistrationResponse>(
+    "/api/v1/auth/register",
+    {
+      method: "POST",
+      body: {
+        email: email.trim().toLowerCase(),
+        password,
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        fullName: `${firstName.trim()} ${lastName.trim()}`.trim(),
+        ...(mobile?.trim() ? { mobile: mobile.trim() } : {}),
+      },
+    },
+  );
+
+  if (!register.ok) {
+    return ofoodErrorResponse(
+      register.status || 400,
+      register.error,
+      "Unable to create account",
+    );
   }
 
-  const timestamp = nowIso();
-  const id = createId("user_customer");
+  const session = await loginWithOfood(email.trim().toLowerCase(), password);
+  if (!session.payload) {
+    return (
+      session.error ??
+      jsonError("Account created. Please log in.", 201, ErrorCode.UNKNOWN)
+    );
+  }
 
-  const user: User = {
-    id,
-    email: parsed.data.email.trim().toLowerCase(),
-    password: parsed.data.password,
-    role: UserRole.CUSTOMER,
-    firstName: parsed.data.firstName.trim(),
-    lastName: parsed.data.lastName.trim(),
-    mobile: parsed.data.mobile,
-    isActive: true,
-    createdAt: timestamp,
-    updatedAt: timestamp,
-  };
-
-  const customer: Customer = {
-    ...user,
-    role: UserRole.CUSTOMER,
-    preferences: {
-      dietaryRestrictions: [],
-      allergies: [],
-      spiceLevel: "medium",
-    },
-  };
-
-  mutate((db) => {
-    db.users.push(user);
-    db.customers.push(customer);
+  return jsonAuthOk(session.payload, session.cookies, {
+    status: 201,
+    message: register.data?.message ?? "Account created",
   });
-
-  const token = createSession(user.id);
-
-  return jsonOk(
-    {
-      user: stripPassword(customer),
-      token,
-    },
-    { status: 201, message: "Account created" },
-  );
 }

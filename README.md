@@ -10,7 +10,8 @@ Meal subscription platform for wellness-focused meal plans. Customers browse pla
 - **TanStack Query** + **Redux Toolkit** for client state/data
 - **Vitest** + Testing Library for unit tests
 - **Playwright** for e2e smoke tests
-- In-memory mock data layer (`src/mocks/seed.ts`) for local development
+- In-memory mock data layer (`src/mocks/seed.ts`) for catalog/checkout until those APIs are wired
+- **OFOOD** backend for authentication (`https://ofood-backend.onrender.com`)
 
 ## Getting started
 
@@ -22,14 +23,22 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
-## Demo accounts
+Copy `.env.example` to `.env.local` if you need to override the API base URL:
 
-| Role     | Email                  | Password       |
-| -------- | ---------------------- | -------------- |
-| Admin    | `admin@etomics.com`    | `Admin123!`    |
-| Customer | `customer@etomics.com` | `Customer123!` |
+```
+OFOOD_API_BASE_URL=https://ofood-backend.onrender.com
+```
 
-Passwords are plaintext in the mock seed for local demo only — never use this pattern in production.
+## Authentication
+
+Login, signup, logout, session refresh, and `/me` are proxied to the OFOOD Authentication API. After a successful login, users are routed by role:
+
+| Backend role    | Portal                |
+| --------------- | --------------------- |
+| `ROLE_CUSTOMER` | `/customer/dashboard` |
+| `ROLE_ADMIN`    | `/admin/dashboard`    |
+
+Access tokens are short-lived; the HttpOnly `OFOOD_REFRESH_TOKEN` cookie is stored on this app’s domain so `/api/auth/me` and `/api/auth/refresh` can rotate tokens.
 
 ## Architecture
 

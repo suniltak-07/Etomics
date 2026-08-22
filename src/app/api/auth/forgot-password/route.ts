@@ -1,9 +1,8 @@
 import type { NextRequest } from "next/server";
 import {
   isErrorResponse,
-  jsonOk,
-  parseJsonBody,
   jsonError,
+  parseJsonBody,
 } from "@/lib/api/route-helpers";
 import { forgotPasswordSchema } from "@/features/auth/schemas/authSchemas";
 import { ErrorCode } from "@/lib/api/errors";
@@ -21,11 +20,9 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  return jsonOk(
-    { sent: true },
-    {
-      message:
-        "If an account exists for that email, password reset instructions have been sent.",
-    },
+  return jsonError(
+    "Password reset is not available yet. Please contact support or use Change password after logging in.",
+    501,
+    ErrorCode.UNKNOWN,
   );
 }

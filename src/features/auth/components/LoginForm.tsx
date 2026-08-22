@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
@@ -13,33 +13,32 @@ import {
   type LoginInput,
 } from "@/features/auth/schemas/authSchemas";
 import { authService } from "@/features/auth/services/authService";
-import { AUTH_TOKEN_KEY } from "@/lib/api/client";
-import { setClientSession } from "@/lib/auth/session";
+import { persistAuthSession } from "@/features/auth/persistSession";
 import { ApiError } from "@/lib/api/errors";
-import { useAppDispatch } from "@/store/hooks";
-import { setCredentials } from "@/store/slices/authSlice";
-import { UserRole } from "@/types/enums";
-
-const DEMO_HINT =
-  "Demo: customer@etomics.com / Customer123! · admin@etomics.com / Admin123!";
-
-function redirectForRole(role: string, fallback?: string | null) {
-  if (fallback && fallback.startsWith("/")) return fallback;
-  if (role === UserRole.ADMIN || role === UserRole.SUPER_ADMIN) {
-    return "/admin/dashboard";
-  }
-  return "/customer/dashboard";
-}
+import { splashHref } from "@/lib/auth/splash";
+import {
+  clearLogoutRedirect,
+  isLogoutRedirect,
+} from "@/lib/auth/logout-redirect";
 
 export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const dispatch = useAppDispatch();
   const [formError, setFormError] = useState<string | null>(null);
+  const [fromLogout] = useState(() => isLogoutRedirect());
+
+  useEffect(() => {
+    if (!fromLogout) return;
+    clearLogoutRedirect();
+    if (searchParams.get("returnUrl") || searchParams.get("redirect")) {
+      router.replace("/login");
+    }
+  }, [fromLogout, router, searchParams]);
 
   const redirect = useMemo(() => {
+    if (fromLogout) return null;
     return searchParams.get("returnUrl") ?? searchParams.get("redirect");
-  }, [searchParams]);
+  }, [fromLogout, searchParams]);
 
   const {
     register,
@@ -54,16 +53,9 @@ export function LoginForm() {
     setFormError(null);
     try {
       const response = await authService.login(values);
-      const { user, token } = response.data;
-      setClientSession(token, user);
-      try {
-        window.localStorage.setItem(AUTH_TOKEN_KEY, token);
-      } catch {
-        // ignore storage failures
-      }
-      dispatch(setCredentials({ user, token }));
-      router.replace(redirectForRole(user.role, redirect));
-      router.refresh();
+      const { user, token, expiresIn } = response.data;
+      persistAuthSession(user, token, expiresIn);
+      router.replace(splashHref(redirect));
     } catch (error) {
       setFormError(
         error instanceof ApiError
@@ -140,10 +132,6 @@ export function LoginForm() {
         >
           Create an account
         </Link>
-      </p>
-
-      <p className="bg-brand-sand text-brand-muted rounded-md px-3 py-2 text-center text-[11px] leading-relaxed">
-        {DEMO_HINT}
       </p>
     </form>
   );

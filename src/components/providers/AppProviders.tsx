@@ -4,7 +4,6 @@ import { useState, type ReactNode } from "react";
 import { Provider } from "react-redux";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { store } from "@/store";
-import { AuthHydrator } from "@/features/auth/components/AuthHydrator";
 
 export interface AppProvidersProps {
   children: ReactNode;
@@ -27,9 +26,7 @@ export function AppProviders({ children }: AppProvidersProps) {
 
   return (
     <Provider store={store}>
-      <QueryClientProvider client={queryClient}>
-        <AuthHydrator>{children}</AuthHydrator>
-      </QueryClientProvider>
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     </Provider>
   );
 }
