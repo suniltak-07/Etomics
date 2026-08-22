@@ -10,7 +10,9 @@ export const API_ENDPOINTS = {
     signup: resource("/auth/signup"),
     logout: resource("/auth/logout"),
     me: resource("/auth/me"),
+    refresh: resource("/auth/refresh"),
     forgotPassword: resource("/auth/forgot-password"),
+    changePassword: resource("/auth/change-password"),
     resetPassword: resource("/auth/reset-password"),
   },
   users: {

@@ -1,14 +1,12 @@
 import type { NextRequest } from "next/server";
-import { createSession, findUserByEmail } from "@/mocks/seed";
 import {
   isErrorResponse,
   jsonError,
-  jsonOk,
   parseJsonBody,
-  stripPassword,
 } from "@/lib/api/route-helpers";
-import { loginSchema } from "@/features/auth/schemas/authSchemas";
 import { ErrorCode } from "@/lib/api/errors";
+import { loginSchema } from "@/features/auth/schemas/authSchemas";
+import { jsonAuthOk, loginWithOfood } from "@/lib/backend/session";
 
 export const dynamic = "force-dynamic";
 
@@ -23,19 +21,14 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  const user = findUserByEmail(parsed.data.email);
-  if (!user || user.password !== parsed.data.password) {
-    return jsonError("Invalid email or password", 401, ErrorCode.UNAUTHORIZED);
+  const result = await loginWithOfood(parsed.data.email, parsed.data.password);
+
+  if (!result.payload) {
+    return (
+      result.error ??
+      jsonError("Unable to sign in", 401, ErrorCode.UNAUTHORIZED)
+    );
   }
 
-  if (!user.isActive) {
-    return jsonError("Account is inactive", 403, ErrorCode.FORBIDDEN);
-  }
-
-  const token = createSession(user.id);
-
-  return jsonOk({
-    user: stripPassword(user),
-    token,
-  });
+  return jsonAuthOk(result.payload, result.cookies);
 }

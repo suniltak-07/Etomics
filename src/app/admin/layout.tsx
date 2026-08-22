@@ -19,7 +19,7 @@ export default async function AdminLayout({
 
   // Soft server check when session cookies exist; client AdminShell is the primary gate.
   if (user && !ADMIN_ROLES.includes(user.role)) {
-    redirect("/login?redirect=/admin/dashboard");
+    redirect("/customer/dashboard");
   }
 
   return <AdminShell>{children}</AdminShell>;

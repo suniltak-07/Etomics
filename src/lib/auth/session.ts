@@ -101,10 +101,18 @@ export function getClientUser(): SessionUser | null {
 export function setClientSession(
   token: string,
   user: SessionUser,
-  options?: CookieWriteOptions,
+  options?: CookieWriteOptions & { userMaxAge?: number },
 ): void {
-  writeDocumentCookie(AUTH_TOKEN_COOKIE, token, options);
-  writeDocumentCookie(AUTH_USER_COOKIE, JSON.stringify(user), options);
+  const tokenMaxAge = options?.maxAge ?? DEFAULT_MAX_AGE_SECONDS;
+  const userMaxAge = options?.userMaxAge ?? 60 * 60 * 24 * 30;
+  writeDocumentCookie(AUTH_TOKEN_COOKIE, token, {
+    ...options,
+    maxAge: tokenMaxAge,
+  });
+  writeDocumentCookie(AUTH_USER_COOKIE, JSON.stringify(user), {
+    ...options,
+    maxAge: userMaxAge,
+  });
 }
 
 export function setClientToken(

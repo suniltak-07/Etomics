@@ -1,18 +1,21 @@
 import { api } from "@/lib/api/client";
 import { API_ENDPOINTS } from "@/lib/api/endpoints";
 import type { ApiResponse } from "@/types/api";
-import type { User } from "@/types/entities";
+import type { SessionUser } from "@/lib/auth/session";
 import type {
+  ChangePasswordInput,
   ForgotPasswordInput,
   LoginInput,
   SignupInput,
 } from "@/features/auth/schemas/authSchemas";
 
-export type AuthUser = Omit<User, "password">;
+export type AuthUser = SessionUser;
 
 export interface AuthSession {
   user: AuthUser;
   token: string;
+  expiresIn?: number;
+  refreshed?: boolean;
 }
 
 export const authService = {
@@ -31,7 +34,18 @@ export const authService = {
   },
 
   me() {
-    return api.get<ApiResponse<{ user: AuthUser }>>(API_ENDPOINTS.auth.me);
+    return api.get<ApiResponse<AuthSession>>(API_ENDPOINTS.auth.me);
+  },
+
+  refresh() {
+    return api.post<ApiResponse<AuthSession>>(API_ENDPOINTS.auth.refresh);
+  },
+
+  changePassword(input: ChangePasswordInput) {
+    return api.post<ApiResponse<{ changed: boolean }>>(
+      API_ENDPOINTS.auth.changePassword,
+      input,
+    );
   },
 
   forgotPassword(input: ForgotPasswordInput) {

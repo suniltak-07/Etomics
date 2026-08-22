@@ -13,23 +13,11 @@ import {
   type LoginInput,
 } from "@/features/auth/schemas/authSchemas";
 import { authService } from "@/features/auth/services/authService";
-import { AUTH_TOKEN_KEY } from "@/lib/api/client";
-import { setClientSession } from "@/lib/auth/session";
+import { persistAuthSession } from "@/features/auth/persistSession";
 import { ApiError } from "@/lib/api/errors";
+import { resolvePostLoginPath } from "@/lib/backend/roles";
 import { useAppDispatch } from "@/store/hooks";
 import { setCredentials } from "@/store/slices/authSlice";
-import { UserRole } from "@/types/enums";
-
-const DEMO_HINT =
-  "Demo: customer@etomics.com / Customer123! · admin@etomics.com / Admin123!";
-
-function redirectForRole(role: string, fallback?: string | null) {
-  if (fallback && fallback.startsWith("/")) return fallback;
-  if (role === UserRole.ADMIN || role === UserRole.SUPER_ADMIN) {
-    return "/admin/dashboard";
-  }
-  return "/customer/dashboard";
-}
 
 export function LoginForm() {
   const router = useRouter();
@@ -54,15 +42,10 @@ export function LoginForm() {
     setFormError(null);
     try {
       const response = await authService.login(values);
-      const { user, token } = response.data;
-      setClientSession(token, user);
-      try {
-        window.localStorage.setItem(AUTH_TOKEN_KEY, token);
-      } catch {
-        // ignore storage failures
-      }
+      const { user, token, expiresIn } = response.data;
+      persistAuthSession(user, token, expiresIn);
       dispatch(setCredentials({ user, token }));
-      router.replace(redirectForRole(user.role, redirect));
+      router.replace(resolvePostLoginPath(user.role, redirect));
       router.refresh();
     } catch (error) {
       setFormError(
@@ -140,10 +123,6 @@ export function LoginForm() {
         >
           Create an account
         </Link>
-      </p>
-
-      <p className="bg-brand-sand text-brand-muted rounded-md px-3 py-2 text-center text-[11px] leading-relaxed">
-        {DEMO_HINT}
       </p>
     </form>
   );
