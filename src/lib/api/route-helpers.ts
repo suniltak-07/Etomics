@@ -205,9 +205,34 @@ export function requireAuth(
 ):
   | PublicUser
   | NextResponse<ApiErrorBody & { error: { message: string; code?: string } }> {
+  const token = extractBearerToken(request);
+  if (!token) {
+    return jsonError(
+      "Authentication required",
+      401,
+      ErrorCode.AUTHENTICATION_REQUIRED,
+    );
+  }
+
+  const payload = decodeJwtPayload(token);
+  if (payload) {
+    const exp = payload.exp;
+    if (typeof exp === "number" && exp * 1000 < Date.now()) {
+      return jsonError(
+        "Access token expired",
+        401,
+        ErrorCode.ACCESS_TOKEN_EXPIRED,
+      );
+    }
+  }
+
   const user = getAuthUser(request);
   if (!user) {
-    return jsonError("Unauthorized", 401, ErrorCode.UNAUTHORIZED);
+    return jsonError(
+      "Access token invalid",
+      401,
+      ErrorCode.ACCESS_TOKEN_INVALID,
+    );
   }
   return user;
 }
@@ -219,7 +244,11 @@ export function requirePermission(
   ApiErrorBody & { error: { message: string; code?: string } }
 > | null {
   if (!user) {
-    return jsonError("Unauthorized", 401, ErrorCode.UNAUTHORIZED);
+    return jsonError(
+      "Authentication required",
+      401,
+      ErrorCode.AUTHENTICATION_REQUIRED,
+    );
   }
   if (!hasPermission(user.role, permission)) {
     return jsonError("Forbidden", 403, ErrorCode.FORBIDDEN);

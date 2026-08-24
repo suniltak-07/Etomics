@@ -12,45 +12,15 @@ import {
 import type {
   OfoodApiError,
   OfoodAuthTokenResponse,
-  OfoodUserDto,
 } from "@/lib/backend/types";
 import { collectBackendRoles } from "@/lib/backend/roles";
-import { mapOfoodUserToSession } from "@/lib/backend/user";
+import { rolesFromJwt } from "@/lib/backend/jwt";
+import { mapOfoodUserToSession, unwrapOfoodUser } from "@/lib/backend/user";
 
 export interface AuthPayload {
   user: SessionUser;
   token: string;
   expiresIn?: number;
-}
-
-function unwrapOfoodUser(payload: unknown): OfoodUserDto | null {
-  if (!payload || typeof payload !== "object") return null;
-  const record = payload as Record<string, unknown>;
-  if (typeof record.id === "string" && typeof record.email === "string") {
-    return record as unknown as OfoodUserDto;
-  }
-  if (record.user && typeof record.user === "object") {
-    return unwrapOfoodUser(record.user);
-  }
-  if (record.data && typeof record.data === "object") {
-    return unwrapOfoodUser(record.data);
-  }
-  return null;
-}
-
-function rolesFromJwt(accessToken: string): string[] {
-  try {
-    const payloadPart = accessToken.split(".")[1];
-    if (!payloadPart) return [];
-    const padded = payloadPart.replace(/-/g, "+").replace(/_/g, "/");
-    const json = JSON.parse(Buffer.from(padded, "base64").toString("utf8")) as {
-      roles?: string[];
-      role?: string;
-    };
-    return collectBackendRoles(json.roles, json.role);
-  } catch {
-    return [];
-  }
 }
 
 async function loadSessionUser(accessToken: string): Promise<{
@@ -96,7 +66,10 @@ export async function refreshAccessToken(request: Request): Promise<{
       token: null,
       setCookies: [],
       status: 401,
-      error: { code: ErrorCode.UNAUTHORIZED, message: "No refresh session" },
+      error: {
+        code: ErrorCode.AUTHENTICATION_REQUIRED,
+        message: "No refresh session",
+      },
     };
   }
 

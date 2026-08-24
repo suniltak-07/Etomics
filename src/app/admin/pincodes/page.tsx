@@ -26,6 +26,12 @@ import {
 } from "@/features/pincodes/schemas/pincodeSchemas";
 import type { ServicePincode } from "@/types/entities";
 import { ApiError } from "@/lib/api/errors";
+import { mapCenterForCityName } from "@/features/cities/catalog";
+import { ServiceAreaEditor } from "@/features/pincodes/components/ServiceAreaEditor";
+import {
+  hasDefinedServiceArea,
+  type ServiceAreaRing,
+} from "@/features/pincodes/serviceArea";
 
 export default function AdminPincodesPage() {
   const citiesQuery = useCities();
@@ -41,6 +47,7 @@ export default function AdminPincodesPage() {
   const [editing, setEditing] = useState<ServicePincode | null>(null);
   const [search, setSearch] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [serviceRing, setServiceRing] = useState<ServiceAreaRing>([]);
 
   const form = useForm<CreatePincodeInput>({
     resolver: zodResolver(createPincodeSchema) as never,
@@ -51,6 +58,16 @@ export default function AdminPincodesPage() {
       isActive: true,
     },
   });
+
+  const selectedCityId = form.watch("cityId");
+  const pincodeValue = form.watch("pincode") ?? "";
+  const areaNameValue = form.watch("areaName");
+  const mapCenter = useMemo(() => {
+    const city = (citiesQuery.data ?? []).find(
+      (item) => item.id === selectedCityId,
+    );
+    return mapCenterForCityName(city?.name ?? "");
+  }, [citiesQuery.data, selectedCityId]);
 
   const cityNameById = useMemo(() => {
     const map = new Map<string, string>();
@@ -77,6 +94,7 @@ export default function AdminPincodesPage() {
   function openCreate() {
     setEditing(null);
     setError(null);
+    setServiceRing([]);
     form.reset({
       cityId: cityFilter || citiesQuery.data?.[0]?.id || "",
       pincode: "",
@@ -89,6 +107,7 @@ export default function AdminPincodesPage() {
   function openEdit(item: ServicePincode) {
     setEditing(item);
     setError(null);
+    setServiceRing(item.serviceArea?.ring ?? []);
     form.reset({
       cityId: item.cityId,
       pincode: item.pincode,
@@ -101,10 +120,16 @@ export default function AdminPincodesPage() {
   async function onSubmit(values: CreatePincodeInput) {
     setError(null);
     try {
+      const payload = {
+        ...values,
+        serviceArea: hasDefinedServiceArea(serviceRing)
+          ? { ring: serviceRing }
+          : null,
+      };
       if (editing) {
-        await updateMutation.mutateAsync({ id: editing.id, input: values });
+        await updateMutation.mutateAsync({ id: editing.id, input: payload });
       } else {
-        await createMutation.mutateAsync(values);
+        await createMutation.mutateAsync(payload);
       }
       setOpen(false);
     } catch (err) {
@@ -142,12 +167,27 @@ export default function AdminPincodesPage() {
       ),
     },
     {
+      id: "serviceArea",
+      header: "Service Area",
+      cell: (row) =>
+        hasDefinedServiceArea(row.serviceArea?.ring) ? (
+          <span className="text-brand-success text-sm font-medium">
+            ✓ Defined
+          </span>
+        ) : (
+          <span className="text-brand-muted text-sm">— Not defined</span>
+        ),
+    },
+    {
       id: "actions",
       header: "Actions",
       cell: (row) => (
         <div className="flex gap-2">
           <Button size="sm" variant="outline" onClick={() => openEdit(row)}>
             Edit
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => openEdit(row)}>
+            Edit area
           </Button>
           <Button
             size="sm"
@@ -229,7 +269,7 @@ export default function AdminPincodesPage() {
         open={open}
         onClose={() => setOpen(false)}
         title={editing ? "Edit pincode" : "Add pincode"}
-        className="max-w-lg"
+        className="max-w-3xl"
       >
         <form className="space-y-3" onSubmit={form.handleSubmit(onSubmit)}>
           <div className="space-y-1.5">
@@ -260,6 +300,18 @@ export default function AdminPincodesPage() {
             />
             Active for delivery
           </label>
+          <div className="space-y-1.5">
+            <Label>Serviceable area</Label>
+            {open ? (
+              <ServiceAreaEditor
+                ring={serviceRing}
+                onChange={setServiceRing}
+                center={mapCenter}
+                pincode={pincodeValue}
+                areaName={areaNameValue}
+              />
+            ) : null}
+          </div>
           {error ? <p className="text-brand-danger text-sm">{error}</p> : null}
           <ModalFooter>
             <Button

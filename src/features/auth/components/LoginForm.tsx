@@ -15,14 +15,18 @@ import {
 import { authService } from "@/features/auth/services/authService";
 import { persistAuthSession } from "@/features/auth/persistSession";
 import { ApiError } from "@/lib/api/errors";
-import { splashHref } from "@/lib/auth/splash";
+import { sanitizeNextPath } from "@/lib/auth/splash";
+import { resolvePostLoginPath } from "@/lib/backend/roles";
 import {
   clearLogoutRedirect,
   isLogoutRedirect,
 } from "@/lib/auth/logout-redirect";
+import { useAppDispatch } from "@/store/hooks";
+import { setCredentials } from "@/store/slices/authSlice";
 
 export function LoginForm() {
   const router = useRouter();
+  const dispatch = useAppDispatch();
   const searchParams = useSearchParams();
   const [formError, setFormError] = useState<string | null>(null);
   const [fromLogout] = useState(() => isLogoutRedirect());
@@ -55,7 +59,10 @@ export function LoginForm() {
       const response = await authService.login(values);
       const { user, token, expiresIn } = response.data;
       persistAuthSession(user, token, expiresIn);
-      router.replace(splashHref(redirect));
+      dispatch(setCredentials({ user, token }));
+      router.replace(
+        resolvePostLoginPath(user.role, sanitizeNextPath(redirect)),
+      );
     } catch (error) {
       setFormError(
         error instanceof ApiError

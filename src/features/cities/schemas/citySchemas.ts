@@ -10,8 +10,6 @@ export const createCitySchema = z.object({
     .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Use lowercase slug, e.g. bengaluru"),
   state: z.string().min(2).max(120),
   status: z.nativeEnum(CityStatus).default(CityStatus.ACTIVE),
-  centerLat: z.coerce.number().min(-90).max(90),
-  centerLng: z.coerce.number().min(-180).max(180),
 });
 
 export const updateCitySchema = createCitySchema.partial();

@@ -24,12 +24,22 @@ function rewriteSetCookieForApp(setCookie: string): string {
   const [nameValue, ...attrs] = setCookie.split(";").map((part) => part.trim());
   if (!nameValue) return setCookie;
 
-  const keep = attrs.filter((attr) => {
+  const keep: string[] = [];
+  let hasPath = false;
+
+  for (const attr of attrs) {
     const key = attr.split("=")[0]?.toLowerCase();
-    if (key === "domain") return false;
-    if (key === "secure" && process.env.NODE_ENV !== "production") return false;
-    return true;
-  });
+    if (key === "domain") continue;
+    if (key === "secure" && process.env.NODE_ENV !== "production") continue;
+    if (key === "path") {
+      hasPath = true;
+      keep.push("Path=/");
+      continue;
+    }
+    keep.push(attr);
+  }
+
+  if (!hasPath) keep.push("Path=/");
 
   return [nameValue, ...keep].join("; ");
 }
@@ -41,6 +51,14 @@ export function applyUpstreamCookies(
   for (const cookie of setCookies) {
     response.headers.append("Set-Cookie", rewriteSetCookieForApp(cookie));
   }
+  return response;
+}
+
+export function expireRefreshCookie(response: NextResponse): NextResponse {
+  response.headers.append(
+    "Set-Cookie",
+    `${OFOOD_REFRESH_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax`,
+  );
   return response;
 }
 
@@ -59,11 +77,30 @@ export function pickRefreshCookieHeader(request: Request): string | undefined {
 function parseError(payload: unknown): OfoodApiError | null {
   if (!payload || typeof payload !== "object") return null;
   const record = payload as Record<string, unknown>;
-  return {
-    code: typeof record.code === "string" ? record.code : undefined,
-    message: typeof record.message === "string" ? record.message : undefined,
-    traceId: typeof record.traceId === "string" ? record.traceId : undefined,
-  };
+  const nested =
+    record.error && typeof record.error === "object"
+      ? (record.error as Record<string, unknown>)
+      : null;
+  const code =
+    typeof record.code === "string"
+      ? record.code
+      : typeof nested?.code === "string"
+        ? nested.code
+        : undefined;
+  const message =
+    typeof record.message === "string"
+      ? record.message
+      : typeof nested?.message === "string"
+        ? nested.message
+        : undefined;
+  const traceId =
+    typeof record.traceId === "string"
+      ? record.traceId
+      : typeof nested?.traceId === "string"
+        ? nested.traceId
+        : undefined;
+  if (!code && !message) return null;
+  return { code, message, traceId };
 }
 
 export function ofoodErrorResponse(

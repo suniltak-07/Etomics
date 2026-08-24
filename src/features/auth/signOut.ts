@@ -1,6 +1,5 @@
-import { AUTH_TOKEN_KEY } from "@/lib/api/client";
 import { authService } from "@/features/auth/services/authService";
-import { clearClientSession } from "@/lib/auth/session";
+import { clearPersistedAuth } from "@/features/auth/persistSession";
 import { beginLogoutRedirect } from "@/lib/auth/logout-redirect";
 import type { AppDispatch } from "@/store";
 import { logout } from "@/store/slices/authSlice";
@@ -15,12 +14,7 @@ export async function signOutAndGoToLogin(
   } catch {
     // still clear local session
   }
-  clearClientSession();
-  try {
-    window.localStorage.removeItem(AUTH_TOKEN_KEY);
-  } catch {
-    // ignore
-  }
+  clearPersistedAuth();
   dispatch(logout());
   replace("/login");
 }

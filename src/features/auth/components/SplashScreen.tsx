@@ -5,9 +5,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Leaf } from "lucide-react";
 import { LoadingState } from "@/components/states";
 import { fetchCurrentUser } from "@/features/auth/loadCurrentUser";
-import { AUTH_TOKEN_KEY } from "@/lib/api/client";
+import { clearPersistedAuth } from "@/features/auth/persistSession";
 import { ApiError } from "@/lib/api/errors";
-import { clearClientSession, getClientToken } from "@/lib/auth/session";
 import { sanitizeNextPath } from "@/lib/auth/splash";
 import { resolvePostLoginPath } from "@/lib/backend/roles";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
@@ -50,12 +49,6 @@ export function SplashScreen() {
         return;
       }
 
-      const token = getClientToken();
-      if (!token) {
-        router.replace("/login");
-        return;
-      }
-
       setPhase("loading");
       try {
         const session = await fetchCurrentUser();
@@ -69,12 +62,7 @@ export function SplashScreen() {
           error instanceof ApiError &&
           (error.statusCode === 401 || error.statusCode === 403);
         if (unauthorized) {
-          clearClientSession();
-          try {
-            window.localStorage.removeItem(AUTH_TOKEN_KEY);
-          } catch {
-            // ignore
-          }
+          clearPersistedAuth();
           dispatch(logout());
         }
         router.replace("/login");

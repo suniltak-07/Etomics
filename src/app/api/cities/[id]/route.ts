@@ -13,6 +13,7 @@ import {
   requirePermission,
 } from "@/lib/api/route-helpers";
 import { updateCitySchema } from "@/features/cities/schemas/citySchemas";
+import { findCityCatalogEntry } from "@/features/cities/catalog";
 
 export const dynamic = "force-dynamic";
 
@@ -58,9 +59,13 @@ export async function PUT(
     return jsonError("City slug already exists", 409, ErrorCode.CONFLICT);
   }
 
+  const nextName = parsed.data.name ?? existing.name;
+  const catalog = findCityCatalogEntry(nextName);
   const updated: City = {
     ...existing,
     ...parsed.data,
+    centerLat: catalog?.centerLat ?? existing.centerLat,
+    centerLng: catalog?.centerLng ?? existing.centerLng,
     updatedAt: nowIso(),
   };
 

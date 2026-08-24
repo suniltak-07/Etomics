@@ -1,7 +1,16 @@
 import type { NextRequest } from "next/server";
 import { jsonError, jsonOk } from "@/lib/api/route-helpers";
 import { ErrorCode } from "@/lib/api/errors";
-import { applyUpstreamCookies, ofoodErrorResponse } from "@/lib/backend/proxy";
+import {
+  isAccessTokenExpired,
+  isAccessTokenInvalid,
+  isAuthenticationRequired,
+} from "@/lib/auth/error-codes";
+import {
+  applyUpstreamCookies,
+  expireRefreshCookie,
+  ofoodErrorResponse,
+} from "@/lib/backend/proxy";
 import {
   getRequestAccessToken,
   loadSessionUser,
@@ -32,15 +41,47 @@ export async function GET(request: NextRequest) {
         "Unable to load profile",
       );
     }
+
+    const code = profile.error?.code;
+    if (isAuthenticationRequired(code)) {
+      return ofoodErrorResponse(401, profile.error, "Authentication required");
+    }
+    if (isAccessTokenInvalid(code)) {
+      return expireRefreshCookie(
+        ofoodErrorResponse(401, profile.error, "Access token invalid"),
+      );
+    }
+    if (code && !isAccessTokenExpired(code)) {
+      return ofoodErrorResponse(
+        profile.status || 401,
+        profile.error,
+        "Unauthorized",
+      );
+    }
   }
 
   const refresh = await refreshAccessToken(request);
   const cookies = refresh.setCookies;
   if (!refresh.token) {
-    return applyUpstreamCookies(
-      jsonError("Unauthorized", 401, ErrorCode.UNAUTHORIZED),
+    const code = refresh.error?.code;
+    const response = applyUpstreamCookies(
+      existingToken
+        ? ofoodErrorResponse(
+            refresh.status || 401,
+            refresh.error,
+            "Unable to refresh session",
+          )
+        : jsonError(
+            "Authentication required",
+            401,
+            ErrorCode.AUTHENTICATION_REQUIRED,
+          ),
       cookies,
     );
+    if (isAccessTokenInvalid(code) || isAuthenticationRequired(code)) {
+      return expireRefreshCookie(response);
+    }
+    return response;
   }
 
   const token = refresh.token;
