@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Modal, ModalFooter } from "@/components/ui/modal";
 import { DataTable, type DataTableColumn } from "@/components/table/DataTable";
 import { EmptyState, ErrorState, LoadingState } from "@/components/states";
@@ -29,6 +30,7 @@ import {
 import { DeliveryPersonStatus, VehicleType } from "@/types/enums";
 import type { DeliveryPerson } from "@/types/entities";
 import { ApiError } from "@/lib/api/errors";
+import { useToast } from "@/store/useToast";
 import { cn } from "@/lib/utils/cn";
 
 export default function AdminDeliveryPersonsPage() {
@@ -38,9 +40,13 @@ export default function AdminDeliveryPersonsPage() {
   const createMutation = useCreateDeliveryPerson();
   const updateMutation = useUpdateDeliveryPerson();
   const deleteMutation = useDeleteDeliveryPerson();
+  const toast = useToast();
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<DeliveryPerson | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<DeliveryPerson | null>(
+    null,
+  );
   const [search, setSearch] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [cityFilter, setCityFilter] = useState("");
@@ -219,16 +225,8 @@ export default function AdminDeliveryPersonsPage() {
           <Button
             size="sm"
             variant="danger"
-            onClick={async () => {
-              if (!window.confirm(`Remove ${row.fullName}?`)) return;
-              try {
-                await deleteMutation.mutateAsync(row.id);
-              } catch (err) {
-                window.alert(
-                  err instanceof ApiError ? err.message : "Delete failed",
-                );
-              }
-            }}
+            disabled={deleteMutation.isPending}
+            onClick={() => setPendingDelete(row)}
           >
             Delete
           </Button>
@@ -418,6 +416,31 @@ export default function AdminDeliveryPersonsPage() {
           </ModalFooter>
         </form>
       </Modal>
+
+      <ConfirmDialog
+        open={Boolean(pendingDelete)}
+        onClose={() => setPendingDelete(null)}
+        description={
+          pendingDelete
+            ? `Remove “${pendingDelete.fullName}”? This action can't be undone.`
+            : undefined
+        }
+        confirmVariant="danger"
+        loading={deleteMutation.isPending}
+        onConfirm={async () => {
+          if (!pendingDelete) return;
+          try {
+            await deleteMutation.mutateAsync(pendingDelete.id);
+            toast.success("Delivery person removed");
+          } catch (err) {
+            toast.error(
+              "Could not remove delivery person",
+              err instanceof ApiError ? err.message : "Please try again.",
+            );
+            throw err;
+          }
+        }}
+      />
     </div>
   );
 }

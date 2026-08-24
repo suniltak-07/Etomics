@@ -2,6 +2,7 @@ import {
   persistAuthSession,
   clearPersistedAuth,
 } from "@/features/auth/persistSession";
+import { getAppApiBaseUrl } from "@/lib/api/config";
 import { ApiError, ErrorCode, mapHttpStatusToCode } from "@/lib/api/errors";
 import {
   extractErrorCode,
@@ -13,6 +14,7 @@ import { AUTH_TOKEN_COOKIE, type SessionUser } from "@/lib/auth/session";
 
 export { AUTH_TOKEN_COOKIE };
 export const AUTH_TOKEN_KEY = AUTH_TOKEN_COOKIE;
+export { getAppApiBaseUrl } from "@/lib/api/config";
 
 type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
@@ -72,11 +74,14 @@ async function rotateAccessToken(
   if (!refreshInFlight) {
     refreshInFlight = (async () => {
       try {
-        const response = await fetchImpl("/api/auth/refresh", {
-          method: "POST",
-          credentials: "same-origin",
-          headers: { Accept: "application/json" },
-        });
+        const response = await fetchImpl(
+          `${getAppApiBaseUrl()}/api/auth/refresh`,
+          {
+            method: "POST",
+            credentials: "include",
+            headers: { Accept: "application/json" },
+          },
+        );
         if (!response.ok) return null;
         const payload = (await response.json()) as {
           data?: {
@@ -138,11 +143,11 @@ function buildUrl(
   query?: Record<string, unknown>,
 ): string {
   const isAbsolute = /^https?:\/\//i.test(path);
+  const origin = baseUrl || getAppApiBaseUrl();
   const url = new URL(
     isAbsolute
       ? path
-      : `${baseUrl.replace(/\/$/, "")}${path.startsWith("/") ? path : `/${path}`}`,
-    isBrowser() ? window.location.origin : "http://localhost",
+      : `${origin.replace(/\/$/, "")}${path.startsWith("/") ? path : `/${path}`}`,
   );
 
   if (query) {
@@ -160,9 +165,7 @@ function buildUrl(
     }
   }
 
-  return isAbsolute || isBrowser()
-    ? url.toString()
-    : `${url.pathname}${url.search}`;
+  return url.toString();
 }
 
 async function parseBody(response: Response): Promise<unknown> {
@@ -188,6 +191,7 @@ export class ApiClient {
   private readonly fetchImpl: typeof fetch;
 
   constructor(options: ApiClientOptions = {}) {
+    // Empty = resolve via getAppApiBaseUrl() on each request (current host / env).
     this.baseUrl = options.baseUrl ?? "";
     this.token = options.token;
     this.defaultHeaders = options.defaultHeaders ?? {};
@@ -264,7 +268,7 @@ export class ApiClient {
         headers,
         body: body === undefined ? undefined : JSON.stringify(body),
         signal: options.signal,
-        credentials: "same-origin",
+        credentials: "include",
       });
     } catch (error) {
       throw new ApiError(

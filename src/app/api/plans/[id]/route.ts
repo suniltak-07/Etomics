@@ -1,22 +1,23 @@
 import type { NextRequest } from "next/server";
-import type { Plan, PlanMeal } from "@/types/entities";
-import { PlanStatus } from "@/types/enums";
-import { getDb, mutate } from "@/mocks/seed";
-import { Permission } from "@/lib/permissions/permissions";
 import { ErrorCode } from "@/lib/api/errors";
 import {
-  createId,
   getAuthUser,
   isAdminRole,
   isErrorResponse,
   jsonError,
   jsonOk,
-  nowIso,
   parseJsonBody,
-  requireAuth,
-  requirePermission,
-  slugify,
 } from "@/lib/api/route-helpers";
+import {
+  applyUpstreamCookies,
+  ofoodErrorResponse,
+  ofoodFetch,
+} from "@/lib/backend/proxy";
+import { mapOfoodPlan, toOfoodUpdateBody } from "@/lib/backend/plans";
+import { getRequestAccessToken } from "@/lib/backend/session";
+import { rolesFromJwt } from "@/lib/backend/jwt";
+import { isAdminBackendRole } from "@/lib/backend/roles";
+import { PlanStatus } from "@/types/enums";
 import {
   planStatusActionSchema,
   updatePlanSchema,
@@ -24,52 +25,71 @@ import {
 
 export const dynamic = "force-dynamic";
 
-function findPlan(idOrSlug: string): Plan | undefined {
-  const db = getDb();
-  return (
-    db.plans.find((plan) => plan.id === idOrSlug) ??
-    db.plans.find((plan) => plan.slug === idOrSlug)
+function isAdminRequest(request: NextRequest): boolean {
+  const user = getAuthUser(request);
+  if (user && isAdminRole(user.role)) return true;
+  const token = getRequestAccessToken(request);
+  if (!token) return false;
+  return rolesFromJwt(token).some(isAdminBackendRole);
+}
+
+function failedUpstream(
+  status: number,
+  error: Parameters<typeof ofoodErrorResponse>[1],
+  cookies: string[],
+  fallback: string,
+) {
+  return applyUpstreamCookies(
+    ofoodErrorResponse(status, error, fallback),
+    cookies,
   );
+}
+
+async function loadPlan(
+  id: string,
+  accessToken: string | null,
+  admin: boolean,
+) {
+  const path = admin ? `/api/v1/plans/${id}/admin` : `/api/v1/plans/${id}`;
+  return ofoodFetch<unknown>(path, { accessToken });
 }
 
 export async function GET(
   request: NextRequest,
-  context: { params: Promise<{ id: string }> },
+  { params }: { params: Promise<{ id: string }> },
 ) {
-  const { id } = await context.params;
-  const { searchParams } = new URL(request.url);
-  const slug = searchParams.get("slug");
-  const key = slug || id;
+  const { id } = await params;
+  const accessToken = getRequestAccessToken(request);
+  const admin = isAdminRequest(request);
 
-  const plan = findPlan(key);
+  const result = await loadPlan(id, accessToken, admin);
+  if (!result.ok) {
+    return failedUpstream(
+      result.status,
+      result.error,
+      result.setCookies,
+      "Plan not found",
+    );
+  }
+
+  const plan = mapOfoodPlan(result.data);
   if (!plan) {
     return jsonError("Plan not found", 404, ErrorCode.NOT_FOUND);
   }
 
-  const user = getAuthUser(request);
-  if (plan.status !== PlanStatus.ACTIVE && !(user && isAdminRole(user.role))) {
-    return jsonError("Plan not found", 404, ErrorCode.NOT_FOUND);
-  }
-
-  return jsonOk(plan);
+  return applyUpstreamCookies(jsonOk(plan), result.setCookies);
 }
 
 export async function PUT(
   request: NextRequest,
-  context: { params: Promise<{ id: string }> },
+  { params }: { params: Promise<{ id: string }> },
 ) {
-  const auth = requireAuth(request);
-  if (isErrorResponse(auth)) return auth;
-
-  const denied = requirePermission(auth, Permission.PLANS_UPDATE);
-  if (denied) return denied;
-
-  const { id } = await context.params;
-  const existing = findPlan(id);
-  if (!existing) {
-    return jsonError("Plan not found", 404, ErrorCode.NOT_FOUND);
+  const accessToken = getRequestAccessToken(request);
+  if (!accessToken) {
+    return jsonError("Unauthorized", 401, ErrorCode.UNAUTHORIZED);
   }
 
+  const { id } = await params;
   const body = await parseJsonBody(request);
   if (isErrorResponse(body)) return body;
 
@@ -80,68 +100,59 @@ export async function PUT(
     });
   }
 
-  const data = parsed.data;
-  const nextSlug =
-    data.slug?.trim() || (data.name ? slugify(data.name) : existing.slug);
-
-  const slugConflict = getDb().plans.find(
-    (plan) => plan.slug === nextSlug && plan.id !== existing.id,
-  );
-  if (slugConflict) {
-    return jsonError("Plan slug already exists", 409, ErrorCode.CONFLICT);
+  const current = await loadPlan(id, accessToken, true);
+  if (current.ok) {
+    const existing = mapOfoodPlan(current.data);
+    if (existing?.status === PlanStatus.ACTIVE) {
+      return jsonError(
+        "You can't edit an active plan. Set it inactive first.",
+        409,
+        ErrorCode.CONFLICT,
+      );
+    }
   }
 
-  let meals = existing.meals;
-  if (data.meals) {
-    meals = data.meals.map((meal, index) => ({
-      id: meal.id ?? createId("meal"),
-      planId: existing.id,
-      mealType: meal.mealType,
-      name: meal.name,
-      description: meal.description,
-      calories: meal.calories,
-      servingSize: meal.servingSize,
-      ingredients: meal.ingredients,
-      nutrition: meal.nutrition,
-      imageUrl: meal.imageUrl || undefined,
-      displayOrder: meal.displayOrder ?? index + 1,
-    })) as PlanMeal[];
-  }
-
-  const updated: Plan = {
-    ...existing,
-    ...data,
-    slug: nextSlug,
-    meals,
-    image: data.image ?? existing.image,
-    gallery: data.gallery ?? existing.gallery,
-    updatedAt: nowIso(),
-  };
-
-  mutate((db) => {
-    const index = db.plans.findIndex((plan) => plan.id === existing.id);
-    if (index >= 0) db.plans[index] = updated;
+  const result = await ofoodFetch<unknown>(`/api/v1/plans/${id}`, {
+    method: "PUT",
+    accessToken,
+    body: toOfoodUpdateBody(parsed.data),
   });
 
-  return jsonOk(updated, { message: "Plan updated" });
+  if (!result.ok) {
+    return failedUpstream(
+      result.status,
+      result.error,
+      result.setCookies,
+      "Unable to update plan",
+    );
+  }
+
+  const plan = mapOfoodPlan(result.data);
+  if (!plan) {
+    return failedUpstream(
+      502,
+      { message: "Plan was updated but the response could not be read." },
+      result.setCookies,
+      "Unable to update plan",
+    );
+  }
+
+  return applyUpstreamCookies(
+    jsonOk(plan, { message: "Plan updated" }),
+    result.setCookies,
+  );
 }
 
 export async function PATCH(
   request: NextRequest,
-  context: { params: Promise<{ id: string }> },
+  { params }: { params: Promise<{ id: string }> },
 ) {
-  const auth = requireAuth(request);
-  if (isErrorResponse(auth)) return auth;
-
-  const denied = requirePermission(auth, Permission.PLANS_UPDATE);
-  if (denied) return denied;
-
-  const { id } = await context.params;
-  const existing = findPlan(id);
-  if (!existing) {
-    return jsonError("Plan not found", 404, ErrorCode.NOT_FOUND);
+  const accessToken = getRequestAccessToken(request);
+  if (!accessToken) {
+    return jsonError("Unauthorized", 401, ErrorCode.UNAUTHORIZED);
   }
 
+  const { id } = await params;
   const body = await parseJsonBody(request);
   if (isErrorResponse(body)) return body;
 
@@ -152,39 +163,65 @@ export async function PATCH(
     });
   }
 
-  const updated: Plan = {
-    ...existing,
-    status: parsed.data.status,
-    updatedAt: nowIso(),
-  };
-
-  mutate((db) => {
-    const index = db.plans.findIndex((plan) => plan.id === existing.id);
-    if (index >= 0) db.plans[index] = updated;
+  const result = await ofoodFetch<unknown>(`/api/v1/plans/${id}`, {
+    method: "PATCH",
+    accessToken,
+    body: { status: parsed.data.status },
   });
 
-  return jsonOk(updated, { message: "Plan status updated" });
+  if (!result.ok) {
+    return failedUpstream(
+      result.status,
+      result.error,
+      result.setCookies,
+      "Unable to update plan status",
+    );
+  }
+
+  const plan = mapOfoodPlan(result.data);
+  if (!plan) {
+    return failedUpstream(
+      502,
+      {
+        message: "Plan status was updated but the response could not be read.",
+      },
+      result.setCookies,
+      "Unable to update plan status",
+    );
+  }
+
+  return applyUpstreamCookies(
+    jsonOk(plan, { message: "Plan status updated" }),
+    result.setCookies,
+  );
 }
 
 export async function DELETE(
   request: NextRequest,
-  context: { params: Promise<{ id: string }> },
+  { params }: { params: Promise<{ id: string }> },
 ) {
-  const auth = requireAuth(request);
-  if (isErrorResponse(auth)) return auth;
-
-  const denied = requirePermission(auth, Permission.PLANS_DELETE);
-  if (denied) return denied;
-
-  const { id } = await context.params;
-  const existing = findPlan(id);
-  if (!existing) {
-    return jsonError("Plan not found", 404, ErrorCode.NOT_FOUND);
+  const accessToken = getRequestAccessToken(request);
+  if (!accessToken) {
+    return jsonError("Unauthorized", 401, ErrorCode.UNAUTHORIZED);
   }
 
-  mutate((db) => {
-    db.plans = db.plans.filter((plan) => plan.id !== existing.id);
+  const { id } = await params;
+  const result = await ofoodFetch<unknown>(`/api/v1/plans/${id}`, {
+    method: "DELETE",
+    accessToken,
   });
 
-  return jsonOk({ id: existing.id }, { message: "Plan deleted" });
+  if (!result.ok) {
+    return failedUpstream(
+      result.status,
+      result.error,
+      result.setCookies,
+      "Unable to delete plan",
+    );
+  }
+
+  return applyUpstreamCookies(
+    jsonOk({ id }, { message: "Plan deleted" }),
+    result.setCookies,
+  );
 }

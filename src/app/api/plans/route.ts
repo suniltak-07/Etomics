@@ -1,42 +1,85 @@
 import type { NextRequest } from "next/server";
-import type { Plan, PlanMeal } from "@/types/entities";
-import { PlanStatus } from "@/types/enums";
-import { getDb, mutate } from "@/mocks/seed";
-import { Permission } from "@/lib/permissions/permissions";
 import { ErrorCode } from "@/lib/api/errors";
 import {
-  createId,
   getAuthUser,
   isAdminRole,
   isErrorResponse,
   jsonError,
   jsonOk,
   jsonPaginated,
-  nowIso,
   paginate,
   parseJsonBody,
   parsePagination,
-  requireAuth,
-  requirePermission,
-  slugify,
 } from "@/lib/api/route-helpers";
+import {
+  applyUpstreamCookies,
+  ofoodErrorResponse,
+  ofoodFetch,
+} from "@/lib/backend/proxy";
+import {
+  mapOfoodPlan,
+  toOfoodCreateBody,
+  unwrapOfoodPlans,
+} from "@/lib/backend/plans";
+import { getRequestAccessToken } from "@/lib/backend/session";
+import { rolesFromJwt } from "@/lib/backend/jwt";
+import { isAdminBackendRole } from "@/lib/backend/roles";
 import { createPlanSchema } from "@/features/plans/schemas/planSchemas";
+import type { Plan } from "@/types/entities";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
+function isAdminRequest(request: NextRequest): boolean {
   const user = getAuthUser(request);
-  const { page, pageSize } = parsePagination(searchParams);
+  if (user && isAdminRole(user.role)) return true;
+  const token = getRequestAccessToken(request);
+  if (!token) return false;
+  return rolesFromJwt(token).some(isAdminBackendRole);
+}
+
+function failedUpstream(
+  status: number,
+  error: Parameters<typeof ofoodErrorResponse>[1],
+  cookies: string[],
+  fallback: string,
+) {
+  return applyUpstreamCookies(
+    ofoodErrorResponse(status, error, fallback),
+    cookies,
+  );
+}
+
+export async function GET(request: NextRequest) {
+  const { searchParams } = request.nextUrl;
+  const accessToken = getRequestAccessToken(request);
+  const admin = isAdminRequest(request);
+
+  const result = await ofoodFetch<unknown>(
+    admin ? "/api/v1/plans/all" : "/api/v1/plans",
+    { accessToken },
+  );
+
+  if (!result.ok) {
+    return failedUpstream(
+      result.status,
+      result.error,
+      result.setCookies,
+      "Unable to load plans",
+    );
+  }
+
+  let plans = unwrapOfoodPlans(result.data)
+    .map(mapOfoodPlan)
+    .filter((plan): plan is Plan => plan !== null);
+
   const status = searchParams.get("status") ?? undefined;
   const featured = searchParams.get("featured");
   const search = searchParams.get("search")?.trim().toLowerCase();
+  const sortBy = searchParams.get("sortBy") ?? "displayOrder";
+  const sortOrder = searchParams.get("sortOrder") === "desc" ? "desc" : "asc";
 
-  let plans = getDb().plans;
-
-  const canSeeNonActive = user && isAdminRole(user.role);
-  if (!canSeeNonActive) {
-    plans = plans.filter((plan) => plan.status === PlanStatus.ACTIVE);
+  if (!admin) {
+    plans = plans.filter((plan) => plan.status === "ACTIVE");
   } else if (status) {
     plans = plans.filter((plan) => plan.status === status);
   }
@@ -56,18 +99,26 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  plans = [...plans].sort((a, b) => a.displayOrder - b.displayOrder);
+  plans = [...plans].sort((a, b) => {
+    const direction = sortOrder === "desc" ? -1 : 1;
+    if (sortBy === "name") return a.name.localeCompare(b.name) * direction;
+    if (sortBy === "price") return (a.price - b.price) * direction;
+    if (sortBy === "updatedAt") {
+      return a.updatedAt.localeCompare(b.updatedAt) * direction;
+    }
+    return (a.displayOrder - b.displayOrder) * direction;
+  });
 
+  const { page, pageSize } = parsePagination(searchParams);
   const { items, meta } = paginate(plans, page, pageSize);
-  return jsonPaginated(items, meta);
+  return applyUpstreamCookies(jsonPaginated(items, meta), result.setCookies);
 }
 
 export async function POST(request: NextRequest) {
-  const auth = requireAuth(request);
-  if (isErrorResponse(auth)) return auth;
-
-  const denied = requirePermission(auth, Permission.PLANS_CREATE);
-  if (denied) return denied;
+  const accessToken = getRequestAccessToken(request);
+  if (!accessToken) {
+    return jsonError("Unauthorized", 401, ErrorCode.UNAUTHORIZED);
+  }
 
   const body = await parseJsonBody(request);
   if (isErrorResponse(body)) return body;
@@ -79,72 +130,33 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  const data = parsed.data;
-  const timestamp = nowIso();
-  const planId = createId("plan");
-  const slug = data.slug?.trim() || slugify(data.name);
-
-  const existing = getDb().plans.find((plan) => plan.slug === slug);
-  if (existing) {
-    return jsonError("Plan slug already exists", 409, ErrorCode.CONFLICT);
-  }
-
-  const meals: PlanMeal[] = (data.meals ?? []).map((meal, index) => ({
-    id: meal.id ?? createId("meal"),
-    planId,
-    mealType: meal.mealType,
-    name: meal.name,
-    description: meal.description,
-    calories: meal.calories,
-    servingSize: meal.servingSize,
-    ingredients: meal.ingredients,
-    nutrition: meal.nutrition,
-    imageUrl: meal.imageUrl || undefined,
-    displayOrder: meal.displayOrder ?? index + 1,
-  }));
-
-  const maxOrder = getDb().plans.reduce(
-    (max, plan) => Math.max(max, plan.displayOrder),
-    0,
-  );
-
-  const plan: Plan = {
-    id: planId,
-    name: data.name,
-    slug,
-    shortDescription: data.shortDescription,
-    description: data.description,
-    image: data.image,
-    gallery: data.gallery,
-    price: data.price,
-    compareAtPrice: data.compareAtPrice,
-    currency: data.currency,
-    duration: data.duration,
-    durationUnit: data.durationUnit,
-    mealCount: data.mealCount,
-    mealTypes: data.mealTypes,
-    mealsPerDay: data.mealsPerDay,
-    servingsPerMeal: data.servingsPerMeal,
-    calories: data.calories,
-    servingSize: data.servingSize,
-    features: data.features,
-    ingredients: data.ingredients,
-    nutrition: data.nutrition,
-    meals,
-    deliveryInformation: data.deliveryInformation,
-    terms: data.terms,
-    status: data.status,
-    isFeatured: data.isFeatured,
-    displayOrder: data.displayOrder ?? maxOrder + 1,
-    seoTitle: data.seoTitle,
-    seoDescription: data.seoDescription,
-    createdAt: timestamp,
-    updatedAt: timestamp,
-  };
-
-  mutate((db) => {
-    db.plans.push(plan);
+  const result = await ofoodFetch<unknown>("/api/v1/plans", {
+    method: "POST",
+    accessToken,
+    body: toOfoodCreateBody(parsed.data),
   });
 
-  return jsonOk(plan, { status: 201, message: "Plan created" });
+  if (!result.ok) {
+    return failedUpstream(
+      result.status,
+      result.error,
+      result.setCookies,
+      "Unable to create plan",
+    );
+  }
+
+  const plan = mapOfoodPlan(result.data);
+  if (!plan) {
+    return failedUpstream(
+      502,
+      { message: "Plan was created but the response could not be read." },
+      result.setCookies,
+      "Unable to create plan",
+    );
+  }
+
+  return applyUpstreamCookies(
+    jsonOk(plan, { status: 201, message: "Plan created" }),
+    result.setCookies,
+  );
 }

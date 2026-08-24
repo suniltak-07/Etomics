@@ -23,9 +23,14 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
-Copy `.env.example` to `.env.local` if you need to override the API base URL:
+Copy `.env.example` to `.env.local` to configure environments:
 
 ```
+# Optional — app `/api/*` origin (defaults to current host / localhost:3000)
+# NEXT_PUBLIC_API_BASE_URL=http://localhost:3000
+# NEXT_PUBLIC_API_BASE_URL=https://your-dev-app.vercel.app
+
+# Upstream OFOOD (server-only proxy target)
 OFOOD_API_BASE_URL=https://ofood-backend.onrender.com
 ```
 

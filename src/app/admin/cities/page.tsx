@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Modal, ModalFooter } from "@/components/ui/modal";
 import { DataTable, type DataTableColumn } from "@/components/table/DataTable";
 import { EmptyState, ErrorState, LoadingState } from "@/components/states";
@@ -25,15 +26,18 @@ import { CITY_CATALOG, findCityCatalogEntry } from "@/features/cities/catalog";
 import { CityStatus } from "@/types/enums";
 import type { City } from "@/types/entities";
 import { ApiError } from "@/lib/api/errors";
+import { useToast } from "@/store/useToast";
 
 export default function AdminCitiesPage() {
   const citiesQuery = useCities();
   const createMutation = useCreateCity();
   const updateMutation = useUpdateCity();
   const deleteMutation = useDeleteCity();
+  const toast = useToast();
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<City | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<City | null>(null);
   const [search, setSearch] = useState("");
   const [error, setError] = useState<string | null>(null);
 
@@ -170,16 +174,7 @@ export default function AdminCitiesPage() {
             size="sm"
             variant="danger"
             disabled={deleteMutation.isPending}
-            onClick={async () => {
-              if (!window.confirm(`Delete ${row.name}?`)) return;
-              try {
-                await deleteMutation.mutateAsync(row.id);
-              } catch (err) {
-                window.alert(
-                  err instanceof ApiError ? err.message : "Delete failed",
-                );
-              }
-            }}
+            onClick={() => setPendingDelete(row)}
           >
             Delete
           </Button>
@@ -288,6 +283,31 @@ export default function AdminCitiesPage() {
           </ModalFooter>
         </form>
       </Modal>
+
+      <ConfirmDialog
+        open={Boolean(pendingDelete)}
+        onClose={() => setPendingDelete(null)}
+        description={
+          pendingDelete
+            ? `Delete “${pendingDelete.name}”? This action can't be undone.`
+            : undefined
+        }
+        confirmVariant="danger"
+        loading={deleteMutation.isPending}
+        onConfirm={async () => {
+          if (!pendingDelete) return;
+          try {
+            await deleteMutation.mutateAsync(pendingDelete.id);
+            toast.success("City deleted");
+          } catch (err) {
+            toast.error(
+              "Could not delete city",
+              err instanceof ApiError ? err.message : "Please try again.",
+            );
+            throw err;
+          }
+        }}
+      />
     </div>
   );
 }

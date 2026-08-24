@@ -9,6 +9,7 @@ import type {
   CreatePlanInput,
   UpdatePlanInput,
 } from "@/features/plans/schemas/planSchemas";
+import type { PlanStatus } from "@/types/enums";
 
 export const planKeys = {
   all: ["plans"] as const,
@@ -54,6 +55,29 @@ export function useUpdatePlan(id: string) {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: planKeys.all });
       void queryClient.invalidateQueries({ queryKey: planKeys.detail(id) });
+    },
+  });
+}
+
+export function useUpdatePlanStatus() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, status }: { id: string; status: PlanStatus }) =>
+      planService.updateStatus(id, status),
+    onSuccess: (_data, { id }) => {
+      void queryClient.invalidateQueries({ queryKey: planKeys.all });
+      void queryClient.invalidateQueries({ queryKey: planKeys.detail(id) });
+    },
+  });
+}
+
+export function useDeletePlan() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => planService.remove(id),
+    onSuccess: (_data, id) => {
+      void queryClient.invalidateQueries({ queryKey: planKeys.all });
+      void queryClient.removeQueries({ queryKey: planKeys.detail(id) });
     },
   });
 }
