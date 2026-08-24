@@ -10,7 +10,7 @@ Do **not** write, update, or run tests for this project right now. We will add t
 
 ## Auth roles
 
-- After login/signup and on portal refresh, users go through `/splash`, which calls `/me` once, then routes:
+- After login/signup, users go to the portal for their role:
   - `CUSTOMER` / `ROLE_CUSTOMER` → `/customer/dashboard`
   - `ADMIN` / `ROLE_ADMIN` → `/admin/dashboard`
-- Do not call `/me` from portal layouts or global providers.
+- Admin and customer layouts wrap pages in `ProtectedRoute`. On refresh it calls `/me` (which refreshes an expired access token) and stays on the same page. Do not bounce through `/splash` for portal reloads.

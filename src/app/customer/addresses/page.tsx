@@ -32,6 +32,7 @@ import {
   createAddressSchema,
   type CreateAddressInput,
 } from "@/features/addresses/schemas/addressSchemas";
+import { mapCenterForCityName } from "@/features/cities/catalog";
 import { serviceabilityService } from "@/features/serviceability/services/serviceabilityService";
 import type { ServiceabilityResult } from "@/lib/serviceability/checkPincode";
 import { PageHeader } from "@/portals/customer/components/PageHeader";
@@ -163,8 +164,9 @@ export default function CustomerAddressesPage() {
         form.setValue("state", result.city.state);
         form.setValue("cityId", result.city.id);
         form.setValue("area", result.servicePincode?.areaName ?? "");
-        form.setValue("latitude", result.city.centerLat);
-        form.setValue("longitude", result.city.centerLng);
+        const [lat, lng] = mapCenterForCityName(result.city.name);
+        form.setValue("latitude", result.city.centerLat ?? lat);
+        form.setValue("longitude", result.city.centerLng ?? lng);
         if (!form.getValues("fullName") && user) {
           form.setValue(
             "fullName",

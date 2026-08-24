@@ -145,12 +145,18 @@ export interface City {
   updatedAt: string;
 }
 
+export interface ServiceAreaPolygon {
+  /** Closed ring of [lat, lng] points (at least 3). */
+  ring: [number, number][];
+}
+
 export interface ServicePincode {
   id: string;
   cityId: string;
   pincode: string;
   areaName?: string;
   isActive: boolean;
+  serviceArea?: ServiceAreaPolygon;
   createdAt: string;
   updatedAt: string;
 }

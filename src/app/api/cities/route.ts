@@ -14,6 +14,7 @@ import {
   requirePermission,
 } from "@/lib/api/route-helpers";
 import { createCitySchema } from "@/features/cities/schemas/citySchemas";
+import { findCityCatalogEntry } from "@/features/cities/catalog";
 import { CityStatus } from "@/types/enums";
 import { slugify } from "@/lib/utils/format";
 
@@ -69,9 +70,12 @@ export async function POST(request: NextRequest) {
   }
 
   const timestamp = nowIso();
+  const catalog = findCityCatalogEntry(parsed.data.name);
   const city: City = {
     id: createId("city"),
     ...parsed.data,
+    centerLat: catalog?.centerLat ?? 20.5937,
+    centerLng: catalog?.centerLng ?? 78.9629,
     createdAt: timestamp,
     updatedAt: timestamp,
   };

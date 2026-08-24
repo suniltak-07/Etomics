@@ -21,6 +21,21 @@ function nullableText(value: string | null | undefined): string | undefined {
   return trimmed ? trimmed : undefined;
 }
 
+export function unwrapOfoodUser(payload: unknown): OfoodUserDto | null {
+  if (!payload || typeof payload !== "object") return null;
+  const record = payload as Record<string, unknown>;
+  if (typeof record.id === "string" && typeof record.email === "string") {
+    return record as unknown as OfoodUserDto;
+  }
+  if (record.user && typeof record.user === "object") {
+    return unwrapOfoodUser(record.user);
+  }
+  if (record.data && typeof record.data === "object") {
+    return unwrapOfoodUser(record.data);
+  }
+  return null;
+}
+
 export function mapOfoodUserToSession(dto: OfoodUserDto): SessionUser | null {
   const role = mapBackendRolesToUserRole(
     collectBackendRoles(dto.roles, dto.role),

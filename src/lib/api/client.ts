@@ -1,6 +1,18 @@
+import {
+  persistAuthSession,
+  clearPersistedAuth,
+} from "@/features/auth/persistSession";
 import { ApiError, ErrorCode, mapHttpStatusToCode } from "@/lib/api/errors";
+import {
+  extractErrorCode,
+  isAccessTokenExpired,
+  isAccessTokenInvalid,
+  isAuthenticationRequired,
+} from "@/lib/auth/error-codes";
+import { AUTH_TOKEN_COOKIE, type SessionUser } from "@/lib/auth/session";
 
-export const AUTH_TOKEN_KEY = "etomics_token";
+export { AUTH_TOKEN_COOKIE };
+export const AUTH_TOKEN_KEY = AUTH_TOKEN_COOKIE;
 
 type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
@@ -18,6 +30,74 @@ export interface RequestOptions {
   token?: string | null;
   /** Skip JSON parsing (rare); default false */
   raw?: boolean;
+  /** Do not attempt a refresh-token retry after 401. */
+  skipRefresh?: boolean;
+}
+
+function persistRotatedAccessToken(
+  token: string,
+  user: SessionUser,
+  expiresIn?: number,
+): void {
+  persistAuthSession(user, token, expiresIn);
+}
+
+const SKIP_REFRESH_PATHS = [
+  "/api/auth/login",
+  "/api/auth/signup",
+  "/api/auth/refresh",
+  "/api/auth/logout",
+  "/api/auth/forgot-password",
+  "/api/auth/me",
+];
+
+function shouldAttemptRefresh(path: string): boolean {
+  try {
+    const pathname = path.startsWith("http")
+      ? new URL(path).pathname
+      : (path.split("?")[0] ?? path);
+    return !SKIP_REFRESH_PATHS.some(
+      (skip) => pathname === skip || pathname.endsWith(skip),
+    );
+  } catch {
+    return true;
+  }
+}
+
+let refreshInFlight: Promise<string | null> | null = null;
+
+async function rotateAccessToken(
+  fetchImpl: typeof fetch,
+): Promise<string | null> {
+  if (!refreshInFlight) {
+    refreshInFlight = (async () => {
+      try {
+        const response = await fetchImpl("/api/auth/refresh", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { Accept: "application/json" },
+        });
+        if (!response.ok) return null;
+        const payload = (await response.json()) as {
+          data?: {
+            token?: string;
+            user?: SessionUser;
+            expiresIn?: number;
+          };
+        };
+        const token = payload.data?.token;
+        const user = payload.data?.user;
+        if (!token || !user) return null;
+        persistRotatedAccessToken(token, user, payload.data?.expiresIn);
+        return token;
+      } catch {
+        return null;
+      } finally {
+        refreshInFlight = null;
+      }
+    })();
+  }
+  return refreshInFlight;
 }
 
 function isBrowser(): boolean {
@@ -43,13 +123,13 @@ export function getAuthToken(explicit?: string | null): string | null {
   }
 
   try {
-    const fromStorage = window.localStorage.getItem(AUTH_TOKEN_KEY);
+    const fromStorage = window.localStorage.getItem(AUTH_TOKEN_COOKIE);
     if (fromStorage) return fromStorage;
   } catch {
     // localStorage may be unavailable (private mode / SSR hydration edge)
   }
 
-  return readCookie(AUTH_TOKEN_KEY);
+  return readCookie(AUTH_TOKEN_COOKIE);
 }
 
 function buildUrl(
@@ -195,6 +275,34 @@ export class ApiClient {
     }
 
     const payload = await parseBody(response);
+
+    if (response.status === 401) {
+      const code = extractErrorCode(payload);
+
+      if (
+        (isAccessTokenInvalid(code) || isAuthenticationRequired(code)) &&
+        isBrowser()
+      ) {
+        clearPersistedAuth();
+      }
+
+      if (
+        isAccessTokenExpired(code) &&
+        !options.skipRefresh &&
+        isBrowser() &&
+        shouldAttemptRefresh(path)
+      ) {
+        const nextToken = await rotateAccessToken(this.fetchImpl);
+        if (nextToken) {
+          return this.request<T>(method, path, body, query, {
+            ...options,
+            token: nextToken,
+            skipRefresh: true,
+          });
+        }
+        clearPersistedAuth();
+      }
+    }
 
     if (!response.ok) {
       throw ApiError.fromResponse(payload, response.status);

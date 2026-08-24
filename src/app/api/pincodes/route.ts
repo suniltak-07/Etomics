@@ -69,6 +69,7 @@ export async function POST(request: NextRequest) {
     pincode: parsed.data.pincode,
     areaName: parsed.data.areaName,
     isActive: parsed.data.isActive,
+    serviceArea: parsed.data.serviceArea ?? undefined,
     createdAt: timestamp,
     updatedAt: timestamp,
   };

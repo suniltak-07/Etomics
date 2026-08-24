@@ -537,6 +537,14 @@ function buildServicePincodes(): ServicePincode[] {
       pincode: "560038",
       areaName: "Indiranagar",
       isActive: true,
+      serviceArea: {
+        ring: [
+          [12.978, 77.636],
+          [12.978, 77.648],
+          [12.968, 77.648],
+          [12.968, 77.636],
+        ],
+      },
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: NOW,
     },

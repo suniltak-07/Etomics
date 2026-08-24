@@ -159,3 +159,11 @@ body {
     animation: none;
   }
 }
+
+.etomics-service-area-map .leaflet-pane {
+  z-index: 1;
+}
+.etomics-service-area-map .leaflet-top,
+.etomics-service-area-map .leaflet-bottom {
+  z-index: 2;
+}

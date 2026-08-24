@@ -59,6 +59,10 @@ export async function PUT(
   const updated: ServicePincode = {
     ...existing,
     ...parsed.data,
+    serviceArea:
+      parsed.data.serviceArea === null
+        ? undefined
+        : (parsed.data.serviceArea ?? existing.serviceArea),
     updatedAt: nowIso(),
   };
 

@@ -21,9 +21,9 @@ import {
   createCitySchema,
   type CreateCityInput,
 } from "@/features/cities/schemas/citySchemas";
+import { CITY_CATALOG, findCityCatalogEntry } from "@/features/cities/catalog";
 import { CityStatus } from "@/types/enums";
 import type { City } from "@/types/entities";
-import { slugify } from "@/lib/utils/format";
 import { ApiError } from "@/lib/api/errors";
 
 export default function AdminCitiesPage() {
@@ -44,10 +44,11 @@ export default function AdminCitiesPage() {
       slug: "",
       state: "",
       status: CityStatus.ACTIVE,
-      centerLat: 12.9716,
-      centerLng: 77.5946,
     },
   });
+
+  const selectedName = form.watch("name");
+  const selectedState = form.watch("state");
 
   const cities = useMemo(() => {
     const items = citiesQuery.data ?? [];
@@ -56,10 +57,47 @@ export default function AdminCitiesPage() {
     return items.filter(
       (city) =>
         city.name.toLowerCase().includes(q) ||
-        city.state.toLowerCase().includes(q) ||
-        city.slug.includes(q),
+        city.state.toLowerCase().includes(q),
     );
   }, [citiesQuery.data, search]);
+
+  const cityOptions = useMemo(() => {
+    const taken = new Set(
+      (citiesQuery.data ?? [])
+        .filter((city) => city.id !== editing?.id)
+        .map((city) => city.name.toLowerCase()),
+    );
+    const options = CITY_CATALOG.filter(
+      (city) => !taken.has(city.name.toLowerCase()),
+    );
+    if (
+      editing &&
+      !options.some(
+        (city) => city.name.toLowerCase() === editing.name.toLowerCase(),
+      )
+    ) {
+      return [
+        {
+          name: editing.name,
+          slug: editing.slug,
+          state: editing.state,
+        },
+        ...options,
+      ];
+    }
+    return options;
+  }, [citiesQuery.data, editing]);
+
+  function applyCatalogCity(name: string) {
+    const entry = findCityCatalogEntry(name);
+    if (!entry) {
+      form.setValue("name", name, { shouldValidate: true });
+      return;
+    }
+    form.setValue("name", entry.name, { shouldValidate: true });
+    form.setValue("slug", entry.slug, { shouldValidate: true });
+    form.setValue("state", entry.state, { shouldValidate: true });
+  }
 
   function openCreate() {
     setEditing(null);
@@ -69,8 +107,6 @@ export default function AdminCitiesPage() {
       slug: "",
       state: "",
       status: CityStatus.ACTIVE,
-      centerLat: 12.9716,
-      centerLng: 77.5946,
     });
     setOpen(true);
   }
@@ -83,19 +119,26 @@ export default function AdminCitiesPage() {
       slug: city.slug,
       state: city.state,
       status: city.status,
-      centerLat: city.centerLat,
-      centerLng: city.centerLng,
     });
     setOpen(true);
   }
 
   async function onSubmit(values: CreateCityInput) {
     setError(null);
+    const catalog = findCityCatalogEntry(values.name);
+    const payload: CreateCityInput = catalog
+      ? {
+          ...values,
+          name: catalog.name,
+          slug: catalog.slug,
+          state: catalog.state,
+        }
+      : values;
     try {
       if (editing) {
-        await updateMutation.mutateAsync({ id: editing.id, input: values });
+        await updateMutation.mutateAsync({ id: editing.id, input: payload });
       } else {
-        await createMutation.mutateAsync(values);
+        await createMutation.mutateAsync(payload);
       }
       setOpen(false);
     } catch (err) {
@@ -107,27 +150,13 @@ export default function AdminCitiesPage() {
     {
       id: "name",
       header: "City",
-      cell: (row) => (
-        <div>
-          <p className="text-brand-ink font-medium">{row.name}</p>
-          <p className="text-brand-muted text-xs">{row.slug}</p>
-        </div>
-      ),
+      cell: (row) => row.name,
     },
     { id: "state", header: "State", cell: (row) => row.state },
     {
       id: "status",
       header: "Status",
       cell: (row) => <StatusBadge status={row.status} />,
-    },
-    {
-      id: "center",
-      header: "Map center",
-      cell: (row) => (
-        <span className="text-brand-muted font-mono text-xs">
-          {row.centerLat.toFixed(4)}, {row.centerLng.toFixed(4)}
-        </span>
-      ),
     },
     {
       id: "actions",
@@ -176,7 +205,7 @@ export default function AdminCitiesPage() {
     <div>
       <PageHeader
         title="Cities"
-        description="Expand EatOmics delivery coverage beyond Bengaluru."
+        description="Choose operating cities. State is set automatically from the city."
         actions={<Button onClick={openCreate}>Add city</Button>}
       />
 
@@ -204,36 +233,35 @@ export default function AdminCitiesPage() {
       >
         <form className="space-y-3" onSubmit={form.handleSubmit(onSubmit)}>
           <div className="space-y-1.5">
-            <Label>City name</Label>
+            <Label htmlFor="city-name">City</Label>
+            <Select
+              id="city-name"
+              value={selectedName}
+              onChange={(event) => applyCatalogCity(event.target.value)}
+            >
+              <option value="">Select city</option>
+              {cityOptions.map((city) => (
+                <option key={city.slug} value={city.name}>
+                  {city.name}
+                </option>
+              ))}
+            </Select>
+            {form.formState.errors.name ? (
+              <p className="text-brand-danger text-xs">
+                {form.formState.errors.name.message}
+              </p>
+            ) : null}
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="city-state">State</Label>
             <Input
-              {...form.register("name")}
-              onBlur={(event) => {
-                form.register("name").onBlur(event);
-                if (!editing && !form.getValues("slug")) {
-                  form.setValue("slug", slugify(event.target.value), {
-                    shouldValidate: true,
-                  });
-                }
-              }}
+              id="city-state"
+              readOnly
+              tabIndex={-1}
+              value={selectedState}
+              placeholder="Select a city first"
+              className="bg-brand-sand cursor-not-allowed"
             />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Slug</Label>
-            <Input {...form.register("slug")} />
-          </div>
-          <div className="space-y-1.5">
-            <Label>State</Label>
-            <Input {...form.register("state")} />
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label>Center latitude</Label>
-              <Input type="number" step="any" {...form.register("centerLat")} />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Center longitude</Label>
-              <Input type="number" step="any" {...form.register("centerLng")} />
-            </div>
           </div>
           <div className="space-y-1.5">
             <Label>Status</Label>

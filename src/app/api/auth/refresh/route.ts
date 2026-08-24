@@ -1,7 +1,8 @@
 import type { NextRequest } from "next/server";
 import { jsonError } from "@/lib/api/route-helpers";
 import { ErrorCode } from "@/lib/api/errors";
-import { ofoodErrorResponse } from "@/lib/backend/proxy";
+import { isAccessTokenInvalid } from "@/lib/auth/error-codes";
+import { expireRefreshCookie, ofoodErrorResponse } from "@/lib/backend/proxy";
 import {
   jsonAuthOk,
   refreshAccessToken,
@@ -13,11 +14,15 @@ export const dynamic = "force-dynamic";
 export async function POST(request: NextRequest) {
   const refresh = await refreshAccessToken(request);
   if (!refresh.token) {
-    return ofoodErrorResponse(
+    const error = ofoodErrorResponse(
       refresh.status || 401,
       refresh.error,
       "Unable to refresh session",
     );
+    if (isAccessTokenInvalid(refresh.error?.code)) {
+      return expireRefreshCookie(error);
+    }
+    return error;
   }
 
   const session = await buildSessionFromTokens(
