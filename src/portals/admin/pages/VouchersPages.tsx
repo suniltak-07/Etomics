@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { LoadingState } from "@/components/states/LoadingState";
 import { ErrorState } from "@/components/states/ErrorState";
 import { PageHeader, StatusBadge } from "@/portals/admin/components/AdminUi";
+import { DeleteVoucherButton } from "@/portals/admin/components/DeleteVoucherButton";
 import { VoucherForm } from "@/portals/admin/forms/VoucherForm";
 import { formatCurrency, formatDate } from "@/lib/utils/format";
 import type { Voucher } from "@/types/entities";
@@ -65,12 +66,19 @@ export function VouchersListPage() {
         id: "actions",
         header: "Actions",
         cell: (row) => (
-          <Link
-            href={`/admin/vouchers/${row.id}/edit`}
-            className="text-brand-green text-xs font-medium hover:underline"
-          >
-            Edit
-          </Link>
+          <div className="flex gap-2">
+            <Link
+              href={`/admin/vouchers/${row.id}/edit`}
+              className="text-brand-green text-xs font-medium hover:underline"
+            >
+              Edit
+            </Link>
+            <DeleteVoucherButton
+              voucherId={row.id}
+              voucherCode={row.code}
+              appearance="link"
+            />
+          </div>
         ),
       },
     ],
@@ -144,6 +152,13 @@ export function VoucherEditPage({ id }: { id: string }) {
       <PageHeader
         title={`Edit · ${query.data.code}`}
         description={query.data.name}
+        actions={
+          <DeleteVoucherButton
+            voucherId={id}
+            voucherCode={query.data.code}
+            redirectTo="/admin/vouchers"
+          />
+        }
       />
       <VoucherForm voucherId={id} initialVoucher={query.data} />
     </div>

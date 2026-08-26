@@ -143,6 +143,7 @@ export function CheckoutWizard({ initialPlanId }: { initialPlanId?: string }) {
       const response = await validateMutation.mutateAsync({
         code: state.voucherCode,
         planId: effectivePlanId,
+        orderAmount: clientPricing?.planPrice,
       });
       setState((current) => ({
         ...current,

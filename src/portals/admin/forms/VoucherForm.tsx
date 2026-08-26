@@ -20,6 +20,7 @@ import {
   useUpdateVoucher,
 } from "@/features/vouchers/queries/useVouchers";
 import { usePlans } from "@/features/plans/queries/usePlans";
+import { useToast } from "@/store/useToast";
 
 function toDateInput(value?: string): string {
   if (!value) return "";
@@ -77,6 +78,7 @@ export function VoucherForm({
   const createMutation = useCreateVoucher();
   const updateMutation = useUpdateVoucher(voucherId ?? "");
   const plansQuery = usePlans({ pageSize: 100 });
+  const toast = useToast();
 
   const defaults = useMemo(
     () => voucherToFormValues(initialVoucher),
@@ -112,23 +114,26 @@ export function VoucherForm({
       ...values,
       startDate: new Date(values.startDate).toISOString(),
       expiryDate: new Date(values.expiryDate).toISOString(),
-      applicablePlans:
-        values.applicablePlans && values.applicablePlans.length > 0
-          ? values.applicablePlans
-          : undefined,
+      applicablePlans: values.applicablePlans ?? [],
     };
     try {
       if (voucherId) {
         await updateMutation.mutateAsync(payload);
+        toast.success("Voucher updated");
         router.push("/admin/vouchers");
       } else {
         await createMutation.mutateAsync(payload);
+        toast.success("Voucher created");
         router.push("/admin/vouchers");
       }
     } catch (error) {
-      setSubmitError(
-        error instanceof Error ? error.message : "Failed to save voucher",
+      const message =
+        error instanceof Error ? error.message : "Failed to save voucher";
+      toast.error(
+        voucherId ? "Could not update voucher" : "Could not create voucher",
+        message,
       );
+      setSubmitError(message);
     }
   });
 
@@ -196,7 +201,7 @@ export function VoucherForm({
             {...register("maxDiscount", {
               setValueAs: (v) =>
                 v === "" || v === null || Number.isNaN(Number(v))
-                  ? undefined
+                  ? null
                   : Number(v),
             })}
           />
@@ -210,7 +215,7 @@ export function VoucherForm({
             {...register("minimumOrderValue", {
               setValueAs: (v) =>
                 v === "" || v === null || Number.isNaN(Number(v))
-                  ? undefined
+                  ? null
                   : Number(v),
             })}
           />
@@ -231,7 +236,7 @@ export function VoucherForm({
             {...register("usageLimit", {
               setValueAs: (v) =>
                 v === "" || v === null || Number.isNaN(Number(v))
-                  ? undefined
+                  ? null
                   : Number(v),
             })}
           />
@@ -244,7 +249,7 @@ export function VoucherForm({
             {...register("usagePerCustomer", {
               setValueAs: (v) =>
                 v === "" || v === null || Number.isNaN(Number(v))
-                  ? undefined
+                  ? null
                   : Number(v),
             })}
           />
