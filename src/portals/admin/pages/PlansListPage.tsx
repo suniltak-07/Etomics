@@ -8,6 +8,8 @@ import { DataTable, type DataTableColumn } from "@/components/table/DataTable";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { PageHeader, StatusBadge } from "@/portals/admin/components/AdminUi";
+import { DeletePlanButton } from "@/portals/admin/components/DeletePlanButton";
+import { EditPlanControl } from "@/portals/admin/components/EditPlanControl";
 import { formatCurrency, formatDate } from "@/lib/utils/format";
 import type { Plan } from "@/types/entities";
 import { PlanStatus } from "@/types/enums";
@@ -51,12 +53,13 @@ export function PlansListPage() {
         id: "price",
         header: "Price",
         sortable: true,
-        cell: (row) => formatCurrency(row.price, row.currency),
+        cell: (row) => formatCurrency(row.price || 0, row.currency || "INR"),
       },
       {
         id: "duration",
         header: "Duration",
-        cell: (row) => `${row.duration} ${row.durationUnit.toLowerCase()}`,
+        cell: (row) =>
+          `${row.duration || 0} ${(row.durationUnit || "DAYS").toLowerCase()}`,
       },
       {
         id: "status",
@@ -80,12 +83,16 @@ export function PlansListPage() {
             >
               View
             </Link>
-            <Link
-              href={`/admin/plans/${row.id}/edit`}
-              className="text-brand-navy text-xs font-medium hover:underline"
-            >
-              Edit
-            </Link>
+            <EditPlanControl
+              planId={row.id}
+              status={row.status}
+              appearance="link"
+            />
+            <DeletePlanButton
+              planId={row.id}
+              planName={row.name}
+              appearance="link"
+            />
           </div>
         ),
       },

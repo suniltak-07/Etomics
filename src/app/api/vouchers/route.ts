@@ -1,38 +1,50 @@
 import type { NextRequest } from "next/server";
-import type { Voucher } from "@/types/entities";
-import { getDb, mutate } from "@/mocks/seed";
-import { Permission } from "@/lib/permissions/permissions";
 import { ErrorCode } from "@/lib/api/errors";
 import {
-  createId,
   isErrorResponse,
   jsonError,
   jsonOk,
   jsonPaginated,
-  nowIso,
   paginate,
   parseJsonBody,
   parsePagination,
-  requireAuth,
-  requirePermission,
 } from "@/lib/api/route-helpers";
+import { applyUpstreamCookies, ofoodFetch } from "@/lib/backend/proxy";
+import { getRequestAccessToken } from "@/lib/backend/session";
+import {
+  mapOfoodVoucher,
+  missingAccessToken,
+  toOfoodWriteBody,
+  unwrapOfoodVouchers,
+  voucherFailedUpstream,
+  voucherUnreadable,
+} from "@/lib/backend/vouchers";
 import { createVoucherSchema } from "@/features/vouchers/schemas/voucherSchemas";
+import type { Voucher } from "@/types/entities";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
-  const auth = requireAuth(request);
-  if (isErrorResponse(auth)) return auth;
+  const { searchParams } = request.nextUrl;
+  const accessToken = getRequestAccessToken(request);
 
-  const denied = requirePermission(auth, Permission.VOUCHERS_READ);
-  if (denied) return denied;
+  const result = await ofoodFetch<unknown>("/api/v1/vouchers", { accessToken });
+  if (!result.ok) {
+    return voucherFailedUpstream(
+      result.status,
+      result.error,
+      result.setCookies,
+      "Unable to load vouchers",
+    );
+  }
 
-  const { searchParams } = new URL(request.url);
-  const { page, pageSize } = parsePagination(searchParams);
-  const status = searchParams.get("status");
+  let vouchers = unwrapOfoodVouchers(result.data)
+    .map(mapOfoodVoucher)
+    .filter((voucher): voucher is Voucher => voucher !== null);
+
+  const status = searchParams.get("status") ?? undefined;
   const search = searchParams.get("search")?.trim().toLowerCase();
 
-  let vouchers = getDb().vouchers;
   if (status) {
     vouchers = vouchers.filter((voucher) => voucher.status === status);
   }
@@ -44,16 +56,14 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  const { page, pageSize } = parsePagination(searchParams);
   const { items, meta } = paginate(vouchers, page, pageSize);
-  return jsonPaginated(items, meta);
+  return applyUpstreamCookies(jsonPaginated(items, meta), result.setCookies);
 }
 
 export async function POST(request: NextRequest) {
-  const auth = requireAuth(request);
-  if (isErrorResponse(auth)) return auth;
-
-  const denied = requirePermission(auth, Permission.VOUCHERS_CREATE);
-  if (denied) return denied;
+  const accessToken = getRequestAccessToken(request);
+  if (!accessToken) return missingAccessToken();
 
   const body = await parseJsonBody(request);
   if (isErrorResponse(body)) return body;
@@ -65,35 +75,31 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  const code = parsed.data.code.trim().toUpperCase();
-  if (getDb().vouchers.some((voucher) => voucher.code.toUpperCase() === code)) {
-    return jsonError("Voucher code already exists", 409, ErrorCode.CONFLICT);
-  }
-
-  const timestamp = nowIso();
-  const voucher: Voucher = {
-    id: createId("voucher"),
-    code,
-    name: parsed.data.name,
-    description: parsed.data.description,
-    discountType: parsed.data.discountType,
-    discountValue: parsed.data.discountValue,
-    maxDiscount: parsed.data.maxDiscount,
-    minimumOrderValue: parsed.data.minimumOrderValue,
-    startDate: parsed.data.startDate,
-    expiryDate: parsed.data.expiryDate,
-    usageLimit: parsed.data.usageLimit,
-    usagePerCustomer: parsed.data.usagePerCustomer,
-    usedCount: 0,
-    applicablePlans: parsed.data.applicablePlans,
-    status: parsed.data.status,
-    createdAt: timestamp,
-    updatedAt: timestamp,
-  };
-
-  mutate((db) => {
-    db.vouchers.push(voucher);
+  const result = await ofoodFetch<unknown>("/api/v1/vouchers", {
+    method: "POST",
+    accessToken,
+    body: toOfoodWriteBody(parsed.data),
   });
 
-  return jsonOk(voucher, { status: 201, message: "Voucher created" });
+  if (!result.ok) {
+    return voucherFailedUpstream(
+      result.status,
+      result.error,
+      result.setCookies,
+      "Unable to create voucher",
+    );
+  }
+
+  const voucher = mapOfoodVoucher(result.data);
+  if (!voucher) {
+    return voucherUnreadable(
+      result.setCookies,
+      "Voucher was created but the response could not be read.",
+    );
+  }
+
+  return applyUpstreamCookies(
+    jsonOk(voucher, { status: 201, message: "Voucher created" }),
+    result.setCookies,
+  );
 }

@@ -1,60 +1,68 @@
-import type { NextRequest } from "next/server";
-import type { Voucher } from "@/types/entities";
-import { getDb, mutate } from "@/mocks/seed";
-import { Permission } from "@/lib/permissions/permissions";
+import type { NextRequest, NextResponse } from "next/server";
 import { ErrorCode } from "@/lib/api/errors";
 import {
   isErrorResponse,
   jsonError,
   jsonOk,
-  nowIso,
   parseJsonBody,
-  requireAuth,
-  requirePermission,
 } from "@/lib/api/route-helpers";
+import { applyUpstreamCookies, ofoodFetch } from "@/lib/backend/proxy";
+import { getRequestAccessToken } from "@/lib/backend/session";
+import {
+  looksLikeUuid,
+  mapOfoodVoucher,
+  missingAccessToken,
+  toOfoodWriteBody,
+  voucherFailedUpstream,
+  voucherUnreadable,
+} from "@/lib/backend/vouchers";
 import { updateVoucherSchema } from "@/features/vouchers/schemas/voucherSchemas";
 
 export const dynamic = "force-dynamic";
 
+async function loadVoucher(id: string, accessToken: string | null) {
+  const byId = await ofoodFetch<unknown>(`/api/v1/vouchers/${id}`, {
+    accessToken,
+  });
+  if (byId.ok || looksLikeUuid(id)) return byId;
+
+  return ofoodFetch<unknown>(
+    `/api/v1/vouchers/code/${encodeURIComponent(id)}`,
+    { accessToken },
+  );
+}
+
 export async function GET(
   request: NextRequest,
-  context: { params: Promise<{ id: string }> },
+  { params }: { params: Promise<{ id: string }> },
 ) {
-  const auth = requireAuth(request);
-  if (isErrorResponse(auth)) return auth;
+  const { id } = await params;
+  const accessToken = getRequestAccessToken(request);
+  const result = await loadVoucher(id, accessToken);
 
-  const denied = requirePermission(auth, Permission.VOUCHERS_READ);
-  if (denied) return denied;
-
-  const { id } = await context.params;
-  const voucher =
-    getDb().vouchers.find((item) => item.id === id) ??
-    getDb().vouchers.find(
-      (item) => item.code.toUpperCase() === id.toUpperCase(),
+  if (!result.ok) {
+    return voucherFailedUpstream(
+      result.status,
+      result.error,
+      result.setCookies,
+      "Voucher not found",
     );
+  }
 
+  const voucher = mapOfoodVoucher(result.data);
   if (!voucher) {
     return jsonError("Voucher not found", 404, ErrorCode.NOT_FOUND);
   }
 
-  return jsonOk(voucher);
+  return applyUpstreamCookies(jsonOk(voucher), result.setCookies);
 }
 
-export async function PUT(
+async function saveVoucher(
   request: NextRequest,
-  context: { params: Promise<{ id: string }> },
-) {
-  const auth = requireAuth(request);
-  if (isErrorResponse(auth)) return auth;
-
-  const denied = requirePermission(auth, Permission.VOUCHERS_UPDATE);
-  if (denied) return denied;
-
-  const { id } = await context.params;
-  const existing = getDb().vouchers.find((item) => item.id === id);
-  if (!existing) {
-    return jsonError("Voucher not found", 404, ErrorCode.NOT_FOUND);
-  }
+  id: string,
+): Promise<NextResponse> {
+  const accessToken = getRequestAccessToken(request);
+  if (!accessToken) return missingAccessToken();
 
   const body = await parseJsonBody(request);
   if (isErrorResponse(body)) return body;
@@ -66,57 +74,78 @@ export async function PUT(
     });
   }
 
-  if (parsed.data.code) {
-    const code = parsed.data.code.trim().toUpperCase();
-    const conflict = getDb().vouchers.find(
-      (item) => item.code.toUpperCase() === code && item.id !== existing.id,
-    );
-    if (conflict) {
-      return jsonError("Voucher code already exists", 409, ErrorCode.CONFLICT);
-    }
-    parsed.data.code = code;
-  }
+  const current = await loadVoucher(id, accessToken);
+  const existing = current.ok ? mapOfoodVoucher(current.data) : null;
 
-  const updated: Voucher = {
-    ...existing,
-    ...parsed.data,
-    updatedAt: nowIso(),
-  };
-
-  mutate((db) => {
-    const index = db.vouchers.findIndex((item) => item.id === id);
-    if (index >= 0) db.vouchers[index] = updated;
+  const result = await ofoodFetch<unknown>(`/api/v1/vouchers/${id}`, {
+    method: "PUT",
+    accessToken,
+    body: toOfoodWriteBody(parsed.data, existing),
   });
 
-  return jsonOk(updated, { message: "Voucher updated" });
+  if (!result.ok) {
+    return voucherFailedUpstream(
+      result.status,
+      result.error,
+      result.setCookies,
+      "Unable to update voucher",
+    );
+  }
+
+  const voucher = mapOfoodVoucher(result.data);
+  if (!voucher) {
+    return voucherUnreadable(
+      result.setCookies,
+      "Voucher was updated but the response could not be read.",
+    );
+  }
+
+  return applyUpstreamCookies(
+    jsonOk(voucher, { message: "Voucher updated" }),
+    result.setCookies,
+  );
+}
+
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params;
+  return saveVoucher(request, id);
 }
 
 export async function PATCH(
   request: NextRequest,
-  context: { params: Promise<{ id: string }> },
+  { params }: { params: Promise<{ id: string }> },
 ) {
-  return PUT(request, context);
+  const { id } = await params;
+  return saveVoucher(request, id);
 }
 
 export async function DELETE(
   request: NextRequest,
-  context: { params: Promise<{ id: string }> },
+  { params }: { params: Promise<{ id: string }> },
 ) {
-  const auth = requireAuth(request);
-  if (isErrorResponse(auth)) return auth;
+  const accessToken = getRequestAccessToken(request);
+  if (!accessToken) return missingAccessToken();
 
-  const denied = requirePermission(auth, Permission.VOUCHERS_DELETE);
-  if (denied) return denied;
-
-  const { id } = await context.params;
-  const existing = getDb().vouchers.find((item) => item.id === id);
-  if (!existing) {
-    return jsonError("Voucher not found", 404, ErrorCode.NOT_FOUND);
-  }
-
-  mutate((db) => {
-    db.vouchers = db.vouchers.filter((item) => item.id !== id);
+  const { id } = await params;
+  const result = await ofoodFetch<unknown>(`/api/v1/vouchers/${id}`, {
+    method: "DELETE",
+    accessToken,
   });
 
-  return jsonOk({ id }, { message: "Voucher deleted" });
+  if (!result.ok) {
+    return voucherFailedUpstream(
+      result.status,
+      result.error,
+      result.setCookies,
+      "Unable to delete voucher",
+    );
+  }
+
+  return applyUpstreamCookies(
+    jsonOk({ id }, { message: "Voucher deleted" }),
+    result.setCookies,
+  );
 }

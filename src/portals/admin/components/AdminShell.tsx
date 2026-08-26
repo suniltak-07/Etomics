@@ -4,6 +4,7 @@ import { type ReactNode, Suspense } from "react";
 import { AdminSidebar } from "@/portals/admin/components/AdminSidebar";
 import { AdminHeader } from "@/portals/admin/components/AdminHeader";
 import { LoadingState } from "@/components/states/LoadingState";
+import { ToastHost } from "@/components/ui/toast-host";
 import { ProtectedRoute } from "@/features/auth/components/ProtectedRoute";
 import { UserRole } from "@/types/enums";
 
@@ -30,6 +31,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
             <main className="flex-1 px-4 py-5 lg:px-6">{children}</main>
           </div>
         </div>
+        <ToastHost />
       </ProtectedRoute>
     </Suspense>
   );

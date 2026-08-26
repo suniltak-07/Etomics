@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Modal, ModalFooter } from "@/components/ui/modal";
 import { Badge } from "@/components/ui/badge";
 import { DataTable, type DataTableColumn } from "@/components/table/DataTable";
@@ -26,6 +27,7 @@ import {
 } from "@/features/pincodes/schemas/pincodeSchemas";
 import type { ServicePincode } from "@/types/entities";
 import { ApiError } from "@/lib/api/errors";
+import { useToast } from "@/store/useToast";
 import { mapCenterForCityName } from "@/features/cities/catalog";
 import { ServiceAreaEditor } from "@/features/pincodes/components/ServiceAreaEditor";
 import {
@@ -42,9 +44,13 @@ export default function AdminPincodesPage() {
   const createMutation = useCreatePincode();
   const updateMutation = useUpdatePincode();
   const deleteMutation = useDeletePincode();
+  const toast = useToast();
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<ServicePincode | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<ServicePincode | null>(
+    null,
+  );
   const [search, setSearch] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [serviceRing, setServiceRing] = useState<ServiceAreaRing>([]);
@@ -192,16 +198,8 @@ export default function AdminPincodesPage() {
           <Button
             size="sm"
             variant="danger"
-            onClick={async () => {
-              if (!window.confirm(`Delete pincode ${row.pincode}?`)) return;
-              try {
-                await deleteMutation.mutateAsync(row.id);
-              } catch (err) {
-                window.alert(
-                  err instanceof ApiError ? err.message : "Delete failed",
-                );
-              }
-            }}
+            disabled={deleteMutation.isPending}
+            onClick={() => setPendingDelete(row)}
           >
             Delete
           </Button>
@@ -330,6 +328,31 @@ export default function AdminPincodesPage() {
           </ModalFooter>
         </form>
       </Modal>
+
+      <ConfirmDialog
+        open={Boolean(pendingDelete)}
+        onClose={() => setPendingDelete(null)}
+        description={
+          pendingDelete
+            ? `Delete pincode ${pendingDelete.pincode}? This action can't be undone.`
+            : undefined
+        }
+        confirmVariant="danger"
+        loading={deleteMutation.isPending}
+        onConfirm={async () => {
+          if (!pendingDelete) return;
+          try {
+            await deleteMutation.mutateAsync(pendingDelete.id);
+            toast.success("Pincode deleted");
+          } catch (err) {
+            toast.error(
+              "Could not delete pincode",
+              err instanceof ApiError ? err.message : "Please try again.",
+            );
+            throw err;
+          }
+        }}
+      />
     </div>
   );
 }

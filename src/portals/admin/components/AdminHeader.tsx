@@ -23,18 +23,20 @@ export function AdminHeader() {
   return (
     <header className="border-brand-border bg-brand-surface/95 sticky top-0 z-30 flex h-14 items-center gap-3 border-b px-4 backdrop-blur lg:px-6">
       <div className="hidden min-w-0 flex-1 items-center gap-2 md:flex">
-        <div className="relative w-full max-w-sm">
-          <Search
-            className="text-brand-muted pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2"
-            aria-hidden
-          />
-          <Input
-            placeholder="Search customers, plans, vouchers…"
-            className="h-9 pl-9"
-            aria-label="Global search"
-            disabled
-          />
-        </div>
+        {false && (
+          <div className="relative w-full max-w-sm">
+            <Search
+              className="text-brand-muted pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2"
+              aria-hidden
+            />
+            <Input
+              placeholder="Search customers, plans, vouchers…"
+              className="h-9 pl-9"
+              aria-label="Global search"
+              disabled
+            />
+          </div>
+        )}
       </div>
       <div className="ml-auto flex items-center gap-3">
         <div className="hidden text-right sm:block">

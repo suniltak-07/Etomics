@@ -57,3 +57,14 @@ export function useUpdateVoucher(id: string) {
     },
   });
 }
+
+export function useDeleteVoucher() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => voucherService.remove(id),
+    onSuccess: (_data, id) => {
+      void queryClient.invalidateQueries({ queryKey: voucherKeys.all });
+      void queryClient.removeQueries({ queryKey: voucherKeys.detail(id) });
+    },
+  });
+}

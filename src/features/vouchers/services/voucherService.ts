@@ -35,6 +35,10 @@ export const voucherService = {
     return api.get<ApiResponse<Voucher>>(API_ENDPOINTS.vouchers.detail(id));
   },
 
+  getByCode(code: string) {
+    return api.get<ApiResponse<Voucher>>(API_ENDPOINTS.vouchers.byCode(code));
+  },
+
   create(input: CreateVoucherInput) {
     return api.post<ApiResponse<Voucher>>(API_ENDPOINTS.vouchers.create, input);
   },
