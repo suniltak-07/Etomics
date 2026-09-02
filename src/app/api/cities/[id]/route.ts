@@ -1,107 +1,139 @@
 import type { NextRequest } from "next/server";
-import type { City } from "@/types/entities";
-import { getDb, mutate } from "@/mocks/seed";
-import { Permission } from "@/lib/permissions/permissions";
 import { ErrorCode } from "@/lib/api/errors";
 import {
   isErrorResponse,
   jsonError,
   jsonOk,
-  nowIso,
   parseJsonBody,
-  requireAuth,
-  requirePermission,
 } from "@/lib/api/route-helpers";
+import { applyUpstreamCookies, ofoodFetch } from "@/lib/backend/proxy";
+import { getRequestAccessToken } from "@/lib/backend/session";
+import {
+  cityFailedUpstream,
+  cityUnreadable,
+  mapOfoodCity,
+  missingAccessToken,
+  toOfoodWriteBody,
+} from "@/lib/backend/cities";
 import { updateCitySchema } from "@/features/cities/schemas/citySchemas";
 import { findCityCatalogEntry } from "@/features/cities/catalog";
 
 export const dynamic = "force-dynamic";
 
+async function loadCity(id: string, accessToken: string | null) {
+  return ofoodFetch<unknown>(`/api/v1/cities/${id}`, { accessToken });
+}
+
 export async function GET(
-  _request: NextRequest,
-  context: { params: Promise<{ id: string }> },
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
 ) {
-  const { id } = await context.params;
-  const city = getDb().cities.find((item) => item.id === id);
-  if (!city) return jsonError("City not found", 404, ErrorCode.NOT_FOUND);
-  return jsonOk(city);
+  const { id } = await params;
+  const accessToken = getRequestAccessToken(request);
+  const result = await loadCity(id, accessToken);
+
+  if (!result.ok) {
+    return cityFailedUpstream(
+      result.status,
+      result.error,
+      result.setCookies,
+      "City not found",
+    );
+  }
+
+  const city = mapOfoodCity(result.data);
+  if (!city) {
+    return jsonError("City not found", 404, ErrorCode.NOT_FOUND);
+  }
+
+  return applyUpstreamCookies(jsonOk(city), result.setCookies);
 }
 
 export async function PUT(
   request: NextRequest,
-  context: { params: Promise<{ id: string }> },
+  { params }: { params: Promise<{ id: string }> },
 ) {
-  const auth = requireAuth(request);
-  if (isErrorResponse(auth)) return auth;
-  const denied = requirePermission(auth, Permission.CITIES_UPDATE);
-  if (denied) return denied;
+  const accessToken = getRequestAccessToken(request);
+  if (!accessToken) return missingAccessToken();
 
-  const { id } = await context.params;
-  const existing = getDb().cities.find((item) => item.id === id);
-  if (!existing) return jsonError("City not found", 404, ErrorCode.NOT_FOUND);
-
-  const body = await parseJsonBody(request);
+  const { id } = await params;
+  const body = await parseJsonBody<Record<string, unknown>>(request);
   if (isErrorResponse(body)) return body;
 
-  const parsed = updateCitySchema.safeParse(body);
+  const name = typeof body.name === "string" ? body.name : "";
+  const catalog = findCityCatalogEntry(name);
+  const parsed = updateCitySchema.safeParse(
+    catalog
+      ? {
+          ...body,
+          name: catalog.name,
+          slug: catalog.slug,
+          state: catalog.state,
+        }
+      : body,
+  );
   if (!parsed.success) {
     return jsonError("Validation failed", 422, ErrorCode.VALIDATION_ERROR, {
       issues: parsed.error.flatten(),
     });
   }
 
-  if (
-    parsed.data.slug &&
-    getDb().cities.some(
-      (city) => city.slug === parsed.data.slug && city.id !== id,
-    )
-  ) {
-    return jsonError("City slug already exists", 409, ErrorCode.CONFLICT);
-  }
+  const current = await loadCity(id, accessToken);
+  const existing = current.ok ? mapOfoodCity(current.data) : null;
 
-  const nextName = parsed.data.name ?? existing.name;
-  const catalog = findCityCatalogEntry(nextName);
-  const updated: City = {
-    ...existing,
-    ...parsed.data,
-    centerLat: catalog?.centerLat ?? existing.centerLat,
-    centerLng: catalog?.centerLng ?? existing.centerLng,
-    updatedAt: nowIso(),
-  };
-
-  mutate((db) => {
-    const index = db.cities.findIndex((item) => item.id === id);
-    if (index >= 0) db.cities[index] = updated;
+  const result = await ofoodFetch<unknown>(`/api/v1/cities/${id}`, {
+    method: "PUT",
+    accessToken,
+    body: toOfoodWriteBody(parsed.data, existing),
   });
 
-  return jsonOk(updated, { message: "City updated" });
+  if (!result.ok) {
+    return cityFailedUpstream(
+      result.status,
+      result.error,
+      result.setCookies,
+      "Unable to update city",
+    );
+  }
+
+  const city = mapOfoodCity(result.data);
+  if (!city) {
+    return cityUnreadable(
+      result.setCookies,
+      "City was updated but the response could not be read.",
+    );
+  }
+
+  return applyUpstreamCookies(
+    jsonOk(city, { message: "City updated" }),
+    result.setCookies,
+  );
 }
 
 export async function DELETE(
   request: NextRequest,
-  context: { params: Promise<{ id: string }> },
+  { params }: { params: Promise<{ id: string }> },
 ) {
-  const auth = requireAuth(request);
-  if (isErrorResponse(auth)) return auth;
-  const denied = requirePermission(auth, Permission.CITIES_DELETE);
-  if (denied) return denied;
+  const accessToken = getRequestAccessToken(request);
+  if (!accessToken) return missingAccessToken();
 
-  const { id } = await context.params;
-  const existing = getDb().cities.find((item) => item.id === id);
-  if (!existing) return jsonError("City not found", 404, ErrorCode.NOT_FOUND);
+  const { id } = await params;
+  const result = await ofoodFetch<unknown>(`/api/v1/cities/${id}`, {
+    method: "DELETE",
+    accessToken,
+  });
 
-  const linked = getDb().servicePincodes.some((item) => item.cityId === id);
-  if (linked) {
-    return jsonError(
-      "Remove or reassign pincodes before deleting this city",
-      409,
-      ErrorCode.CONFLICT,
+  if (!result.ok) {
+    return cityFailedUpstream(
+      result.status,
+      result.error,
+      result.setCookies,
+      "Unable to delete city",
     );
   }
 
-  mutate((db) => {
-    db.cities = db.cities.filter((item) => item.id !== id);
-  });
-
-  return jsonOk({ id }, { message: "City deleted" });
+  return applyUpstreamCookies(
+    jsonOk({ id }, { message: "City deleted" }),
+    result.setCookies,
+  );
 }

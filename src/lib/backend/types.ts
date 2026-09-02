@@ -32,3 +32,7 @@ export interface OfoodRegistrationResponse {
   userId?: string;
   message?: string;
 }
+
+export interface OfoodMessageResponse {
+  message?: string;
+}

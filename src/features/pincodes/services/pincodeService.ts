@@ -6,8 +6,17 @@ import type {
   CreatePincodeInput,
   UpdatePincodeInput,
 } from "@/features/pincodes/schemas/pincodeSchemas";
+import type { PincodeLookupResult } from "@/lib/pincodes/lookup";
+
+export type { PincodeLookupResult };
 
 export const pincodeService = {
+  lookup(pincode: string) {
+    return api.get<ApiResponse<PincodeLookupResult>>(
+      API_ENDPOINTS.pincodes.lookup,
+      { pincode },
+    );
+  },
   list(params?: { cityId?: string; search?: string; activeOnly?: boolean }) {
     return api.get<ApiResponse<ServicePincode[]>>(API_ENDPOINTS.pincodes.list, {
       cityId: params?.cityId,

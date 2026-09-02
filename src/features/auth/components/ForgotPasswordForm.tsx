@@ -77,8 +77,8 @@ export function ForgotPasswordForm() {
 
       {sent ? (
         <p className="bg-brand-success/10 text-brand-success rounded-md px-3 py-2 text-sm">
-          If an account exists for that email, reset instructions have been
-          sent.
+          If an account exists for that email, we&apos;ve sent a reset link.
+          Check your inbox.
         </p>
       ) : null}
 

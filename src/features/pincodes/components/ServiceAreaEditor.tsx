@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import {
   hasDefinedServiceArea,
-  locatePincodeArea,
   type ServiceAreaRing,
 } from "@/features/pincodes/serviceArea";
 
@@ -29,66 +28,52 @@ export function ServiceAreaEditor({
   ring,
   onChange,
   center,
+  pin,
+  bounds,
+  locating,
+  locateError,
+  onLocate,
   pincode,
-  areaName,
 }: {
   ring: ServiceAreaRing;
   onChange: (next: ServiceAreaRing) => void;
   center: [number, number];
+  pin?: [number, number] | null;
+  bounds?: [[number, number], [number, number]] | null;
+  locating?: boolean;
+  locateError?: string | null;
+  onLocate?: () => void;
   pincode: string;
-  areaName?: string;
 }) {
   const [drawing, setDrawing] = useState(false);
   const [draft, setDraft] = useState<ServiceAreaRing>([]);
-  const [located, setLocated] = useState<{
-    pincode: string;
-    point: [number, number];
-  } | null>(null);
-  const [locating, setLocating] = useState(false);
-  const [locateError, setLocateError] = useState<string | null>(null);
-
-  const mapCenter =
-    located?.pincode === pincode.trim() ? located.point : center;
-
-  async function locate() {
-    setLocateError(null);
-    setLocating(true);
-    try {
-      const found = await locatePincodeArea(pincode, areaName);
-      if (!found) {
-        setLocateError(
-          "Could not find that pincode on the map. Zoom manually.",
-        );
-        return;
-      }
-      setLocated({ pincode: pincode.trim(), point: [found.lat, found.lng] });
-    } finally {
-      setLocating(false);
-    }
-  }
+  const [drawError, setDrawError] = useState<string | null>(null);
 
   function startDraw() {
     setDraft([]);
     setDrawing(true);
+    setDrawError(null);
   }
 
   function finishDraw() {
     if (draft.length < 3) {
-      setLocateError("Draw at least 3 points to close the area.");
+      setDrawError("Draw at least 3 points to close the area.");
       return;
     }
     onChange(draft);
     setDrawing(false);
     setDraft([]);
-    setLocateError(null);
+    setDrawError(null);
   }
 
   function clearArea() {
     onChange([]);
     setDraft([]);
     setDrawing(false);
-    setLocateError(null);
+    setDrawError(null);
   }
+
+  const error = drawError ?? locateError ?? null;
 
   return (
     <div className="space-y-2">
@@ -97,7 +82,9 @@ export function ServiceAreaEditor({
           ring={ring}
           draft={draft}
           drawing={drawing}
-          center={mapCenter}
+          center={center}
+          pin={pin}
+          bounds={bounds}
           onAddPoint={(point) => setDraft((current) => [...current, point])}
           onMoveVertex={(index, point) =>
             onChange(
@@ -113,7 +100,7 @@ export function ServiceAreaEditor({
           type="button"
           size="sm"
           variant="outline"
-          onClick={() => void locate()}
+          onClick={() => onLocate?.()}
           disabled={locating || !/^\d{6}$/.test(pincode.trim())}
         >
           {locating ? "Locating…" : "Locate pincode"}
@@ -130,6 +117,7 @@ export function ServiceAreaEditor({
               onClick={() => {
                 setDraft([]);
                 setDrawing(false);
+                setDrawError(null);
               }}
             >
               Cancel draw
@@ -162,12 +150,10 @@ export function ServiceAreaEditor({
         {drawing
           ? "Click the map to add points. Use Finish polygon when the shape is closed (3+ points). Drag vertices after saving to edit."
           : hasDefinedServiceArea(ring)
-            ? "Service area is defined. Drag the green points to edit, or redraw / clear."
-            : "Optional. Draw the delivery boundary for this pincode."}
+            ? "Suggested from the pincode. Drag the green points to edit, or redraw / clear."
+            : "Looking up the pincode boundary. You can draw one if none is found."}
       </p>
-      {locateError ? (
-        <p className="text-brand-danger text-xs">{locateError}</p>
-      ) : null}
+      {error ? <p className="text-brand-danger text-xs">{error}</p> : null}
     </div>
   );
 }

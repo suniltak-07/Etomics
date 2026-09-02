@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,7 @@ import { useCities } from "@/features/cities/hooks/useCities";
 import {
   useCreatePincode,
   useDeletePincode,
+  usePincodeLookup,
   usePincodes,
   useUpdatePincode,
 } from "@/features/pincodes/hooks/usePincodes";
@@ -67,13 +68,58 @@ export default function AdminPincodesPage() {
 
   const selectedCityId = form.watch("cityId");
   const pincodeValue = form.watch("pincode") ?? "";
-  const areaNameValue = form.watch("areaName");
-  const mapCenter = useMemo(() => {
+  const [debouncedPincode, setDebouncedPincode] = useState("");
+  const filledLookupPincode = useRef("");
+
+  useEffect(() => {
+    const handle = window.setTimeout(
+      () => setDebouncedPincode(pincodeValue.trim()),
+      450,
+    );
+    return () => window.clearTimeout(handle);
+  }, [pincodeValue]);
+
+  const lookup = usePincodeLookup(debouncedPincode, open);
+
+  useEffect(() => {
+    const result = lookup.data;
+    if (!result) return;
+
+    const suggestedRing =
+      result.ring && result.ring.length >= 3 ? result.ring : null;
+    const sameAsEditing = Boolean(
+      editing && result.pincode === editing.pincode,
+    );
+
+    if (sameAsEditing && filledLookupPincode.current === "") {
+      filledLookupPincode.current = result.pincode;
+      if (suggestedRing && !hasDefinedServiceArea(editing?.serviceArea?.ring)) {
+        setServiceRing(suggestedRing);
+      }
+      return;
+    }
+
+    if (result.pincode === filledLookupPincode.current) return;
+    if (result.areaName) {
+      form.setValue("areaName", result.areaName, { shouldValidate: true });
+    }
+    if (suggestedRing) setServiceRing(suggestedRing);
+    filledLookupPincode.current = result.pincode;
+  }, [editing, form, lookup.data]);
+
+  const locatedPoint = useMemo((): [number, number] | null => {
+    if (lookup.data?.lat == null || lookup.data?.lng == null) return null;
+    return [lookup.data.lat, lookup.data.lng];
+  }, [lookup.data?.lat, lookup.data?.lng]);
+
+  const cityCenter = useMemo(() => {
     const city = (citiesQuery.data ?? []).find(
       (item) => item.id === selectedCityId,
     );
     return mapCenterForCityName(city?.name ?? "");
   }, [citiesQuery.data, selectedCityId]);
+
+  const mapCenter = locatedPoint ?? cityCenter;
 
   const cityNameById = useMemo(() => {
     const map = new Map<string, string>();
@@ -101,6 +147,7 @@ export default function AdminPincodesPage() {
     setEditing(null);
     setError(null);
     setServiceRing([]);
+    filledLookupPincode.current = "";
     form.reset({
       cityId: cityFilter || citiesQuery.data?.[0]?.id || "",
       pincode: "",
@@ -114,6 +161,7 @@ export default function AdminPincodesPage() {
     setEditing(item);
     setError(null);
     setServiceRing(item.serviceArea?.ring ?? []);
+    filledLookupPincode.current = "";
     form.reset({
       cityId: item.cityId,
       pincode: item.pincode,
@@ -134,8 +182,10 @@ export default function AdminPincodesPage() {
       };
       if (editing) {
         await updateMutation.mutateAsync({ id: editing.id, input: payload });
+        toast.success("Pincode updated");
       } else {
         await createMutation.mutateAsync(payload);
+        toast.success("Pincode added");
       }
       setOpen(false);
     } catch (err) {
@@ -283,11 +333,31 @@ export default function AdminPincodesPage() {
           </div>
           <div className="space-y-1.5">
             <Label>Pincode</Label>
-            <Input {...form.register("pincode")} placeholder="560038" />
+            <Input
+              {...form.register("pincode")}
+              inputMode="numeric"
+              maxLength={6}
+              autoComplete="postal-code"
+              placeholder="560038"
+            />
           </div>
           <div className="space-y-1.5">
             <Label>Area name</Label>
             <Input {...form.register("areaName")} placeholder="Indiranagar" />
+            {lookup.isFetching ? (
+              <p className="text-brand-muted text-xs">
+                Looking up area from pincode…
+              </p>
+            ) : lookup.data?.areaName ? (
+              <p className="text-brand-muted text-xs">
+                Filled from India Post / OpenStreetMap. You can edit it.
+              </p>
+            ) : lookup.isError ? (
+              <p className="text-brand-muted text-xs">
+                Could not find that pincode. Enter the area name and zoom the
+                map manually.
+              </p>
+            ) : null}
           </div>
           <label className="text-brand-ink flex items-center gap-2 text-sm">
             <Checkbox
@@ -305,8 +375,18 @@ export default function AdminPincodesPage() {
                 ring={serviceRing}
                 onChange={setServiceRing}
                 center={mapCenter}
+                pin={locatedPoint}
+                bounds={lookup.data?.bounds ?? null}
+                locating={lookup.isFetching}
+                locateError={
+                  lookup.isError && /^\d{6}$/.test(debouncedPincode)
+                    ? "Could not find that pincode on the map. Zoom manually."
+                    : null
+                }
+                onLocate={() => {
+                  void lookup.refetch();
+                }}
                 pincode={pincodeValue}
-                areaName={areaNameValue}
               />
             ) : null}
           </div>
