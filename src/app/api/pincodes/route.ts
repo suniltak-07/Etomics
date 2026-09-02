@@ -1,29 +1,48 @@
 import type { NextRequest } from "next/server";
-import type { ServicePincode } from "@/types/entities";
-import { getDb, mutate } from "@/mocks/seed";
-import { Permission } from "@/lib/permissions/permissions";
 import { ErrorCode } from "@/lib/api/errors";
 import {
-  createId,
   isErrorResponse,
   jsonError,
   jsonOk,
-  nowIso,
   parseJsonBody,
-  requireAuth,
-  requirePermission,
 } from "@/lib/api/route-helpers";
+import { applyUpstreamCookies, ofoodFetch } from "@/lib/backend/proxy";
+import { getRequestAccessToken } from "@/lib/backend/session";
+import {
+  mapOfoodPincode,
+  missingAccessToken,
+  pincodeFailedUpstream,
+  pincodeUnreadable,
+  toOfoodWriteBody,
+  unwrapOfoodPincodes,
+} from "@/lib/backend/pincodes";
 import { createPincodeSchema } from "@/features/pincodes/schemas/pincodeSchemas";
+import type { ServicePincode } from "@/types/entities";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
+  const { searchParams } = request.nextUrl;
+  const accessToken = getRequestAccessToken(request);
+
+  const result = await ofoodFetch<unknown>("/api/v1/pincodes", { accessToken });
+  if (!result.ok) {
+    return pincodeFailedUpstream(
+      result.status,
+      result.error,
+      result.setCookies,
+      "Unable to load pincodes",
+    );
+  }
+
+  let items = unwrapOfoodPincodes(result.data)
+    .map(mapOfoodPincode)
+    .filter((item): item is ServicePincode => item !== null);
+
   const cityId = searchParams.get("cityId") ?? undefined;
-  const search = searchParams.get("search")?.toLowerCase();
+  const search = searchParams.get("search")?.trim().toLowerCase();
   const activeOnly = searchParams.get("activeOnly") === "true";
 
-  let items = getDb().servicePincodes;
   if (cityId) items = items.filter((item) => item.cityId === cityId);
   if (activeOnly) items = items.filter((item) => item.isActive);
   if (search) {
@@ -34,14 +53,12 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  return jsonOk(items);
+  return applyUpstreamCookies(jsonOk(items), result.setCookies);
 }
 
 export async function POST(request: NextRequest) {
-  const auth = requireAuth(request);
-  if (isErrorResponse(auth)) return auth;
-  const denied = requirePermission(auth, Permission.PINCODES_CREATE);
-  if (denied) return denied;
+  const accessToken = getRequestAccessToken(request);
+  if (!accessToken) return missingAccessToken();
 
   const body = await parseJsonBody(request);
   if (isErrorResponse(body)) return body;
@@ -53,30 +70,31 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  const city = getDb().cities.find((item) => item.id === parsed.data.cityId);
-  if (!city) return jsonError("City not found", 404, ErrorCode.NOT_FOUND);
-
-  if (
-    getDb().servicePincodes.some((item) => item.pincode === parsed.data.pincode)
-  ) {
-    return jsonError("Pincode already exists", 409, ErrorCode.CONFLICT);
-  }
-
-  const timestamp = nowIso();
-  const pincode: ServicePincode = {
-    id: createId("pin"),
-    cityId: parsed.data.cityId,
-    pincode: parsed.data.pincode,
-    areaName: parsed.data.areaName,
-    isActive: parsed.data.isActive,
-    serviceArea: parsed.data.serviceArea ?? undefined,
-    createdAt: timestamp,
-    updatedAt: timestamp,
-  };
-
-  mutate((db) => {
-    db.servicePincodes.push(pincode);
+  const result = await ofoodFetch<unknown>("/api/v1/pincodes", {
+    method: "POST",
+    accessToken,
+    body: toOfoodWriteBody(parsed.data),
   });
 
-  return jsonOk(pincode, { status: 201, message: "Pincode added" });
+  if (!result.ok) {
+    return pincodeFailedUpstream(
+      result.status,
+      result.error,
+      result.setCookies,
+      "Unable to create pincode",
+    );
+  }
+
+  const pincode = mapOfoodPincode(result.data);
+  if (!pincode) {
+    return pincodeUnreadable(
+      result.setCookies,
+      "Pincode was created but the response could not be read.",
+    );
+  }
+
+  return applyUpstreamCookies(
+    jsonOk(pincode, { status: 201, message: "Pincode added" }),
+    result.setCookies,
+  );
 }

@@ -21,12 +21,21 @@ const vertexIcon = L.divIcon({
   iconAnchor: [6, 6],
 });
 
+const pinIcon = L.divIcon({
+  className: "etomics-pincode-pin",
+  html: '<span class="block size-3 rounded-full border-2 border-white bg-[#1d3557] shadow"></span>',
+  iconSize: [12, 12],
+  iconAnchor: [6, 6],
+});
+
 function InvalidateAndFit({
   ring,
   center,
+  bounds,
 }: {
   ring: ServiceAreaRing;
   center: [number, number];
+  bounds?: [[number, number], [number, number]] | null;
 }) {
   const map = useMap();
 
@@ -36,14 +45,16 @@ function InvalidateAndFit({
   }, [map]);
 
   useEffect(() => {
-    map.setView(center, 14, { animate: true });
-  }, [center, map]);
-
-  useEffect(() => {
     if (ring.length >= 2) {
       map.fitBounds(L.latLngBounds(ring), { padding: [28, 28], maxZoom: 16 });
+      return;
     }
-  }, [map, ring]);
+    if (bounds) {
+      map.fitBounds(bounds, { padding: [40, 40], maxZoom: 16, animate: true });
+      return;
+    }
+    map.setView(center, 14, { animate: true });
+  }, [bounds, center, map, ring]);
 
   return null;
 }
@@ -69,6 +80,8 @@ export function ServiceAreaMap({
   draft,
   drawing,
   center,
+  pin,
+  bounds,
   onAddPoint,
   onMoveVertex,
 }: {
@@ -76,6 +89,8 @@ export function ServiceAreaMap({
   draft: ServiceAreaRing;
   drawing: boolean;
   center: [number, number];
+  pin?: [number, number] | null;
+  bounds?: [[number, number], [number, number]] | null;
   onAddPoint: (point: [number, number]) => void;
   onMoveVertex: (index: number, point: [number, number]) => void;
 }) {
@@ -92,8 +107,11 @@ export function ServiceAreaMap({
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
-      <InvalidateAndFit ring={vertices} center={center} />
+      <InvalidateAndFit ring={vertices} center={center} bounds={bounds} />
       <DrawClicks enabled={drawing} onAdd={onAddPoint} />
+      {pin && ring.length < 3 && !drawing ? (
+        <Marker position={pin} icon={pinIcon} />
+      ) : null}
       {!drawing && ring.length >= 3 ? (
         <Polygon
           positions={ring}

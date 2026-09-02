@@ -96,6 +96,7 @@ export const API_ENDPOINTS = {
   pincodes: {
     list: resource("/pincodes"),
     detail: (id: string) => resource(`/pincodes/${id}`),
+    lookup: resource("/pincodes/lookup"),
     create: resource("/pincodes"),
     update: (id: string) => resource(`/pincodes/${id}`),
     delete: (id: string) => resource(`/pincodes/${id}`),

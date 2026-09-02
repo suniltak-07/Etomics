@@ -1,35 +1,61 @@
 import type { NextRequest } from "next/server";
-import type { ServicePincode } from "@/types/entities";
-import { getDb, mutate } from "@/mocks/seed";
-import { Permission } from "@/lib/permissions/permissions";
 import { ErrorCode } from "@/lib/api/errors";
 import {
   isErrorResponse,
   jsonError,
   jsonOk,
-  nowIso,
   parseJsonBody,
-  requireAuth,
-  requirePermission,
 } from "@/lib/api/route-helpers";
+import { applyUpstreamCookies, ofoodFetch } from "@/lib/backend/proxy";
+import { getRequestAccessToken } from "@/lib/backend/session";
+import {
+  mapOfoodPincode,
+  missingAccessToken,
+  pincodeFailedUpstream,
+  pincodeUnreadable,
+  toOfoodWriteBody,
+} from "@/lib/backend/pincodes";
 import { updatePincodeSchema } from "@/features/pincodes/schemas/pincodeSchemas";
 
 export const dynamic = "force-dynamic";
 
+async function loadPincode(id: string, accessToken: string | null) {
+  return ofoodFetch<unknown>(`/api/v1/pincodes/${id}`, { accessToken });
+}
+
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params;
+  const accessToken = getRequestAccessToken(request);
+  const result = await loadPincode(id, accessToken);
+
+  if (!result.ok) {
+    return pincodeFailedUpstream(
+      result.status,
+      result.error,
+      result.setCookies,
+      "Pincode not found",
+    );
+  }
+
+  const pincode = mapOfoodPincode(result.data);
+  if (!pincode) {
+    return jsonError("Pincode not found", 404, ErrorCode.NOT_FOUND);
+  }
+
+  return applyUpstreamCookies(jsonOk(pincode), result.setCookies);
+}
+
 export async function PUT(
   request: NextRequest,
-  context: { params: Promise<{ id: string }> },
+  { params }: { params: Promise<{ id: string }> },
 ) {
-  const auth = requireAuth(request);
-  if (isErrorResponse(auth)) return auth;
-  const denied = requirePermission(auth, Permission.PINCODES_UPDATE);
-  if (denied) return denied;
+  const accessToken = getRequestAccessToken(request);
+  if (!accessToken) return missingAccessToken();
 
-  const { id } = await context.params;
-  const existing = getDb().servicePincodes.find((item) => item.id === id);
-  if (!existing)
-    return jsonError("Pincode not found", 404, ErrorCode.NOT_FOUND);
-
+  const { id } = await params;
   const body = await parseJsonBody(request);
   if (isErrorResponse(body)) return body;
 
@@ -40,60 +66,62 @@ export async function PUT(
     });
   }
 
-  if (
-    parsed.data.pincode &&
-    getDb().servicePincodes.some(
-      (item) => item.pincode === parsed.data.pincode && item.id !== id,
-    )
-  ) {
-    return jsonError("Pincode already exists", 409, ErrorCode.CONFLICT);
-  }
+  const current = await loadPincode(id, accessToken);
+  const existing = current.ok ? mapOfoodPincode(current.data) : null;
 
-  if (
-    parsed.data.cityId &&
-    !getDb().cities.some((city) => city.id === parsed.data.cityId)
-  ) {
-    return jsonError("City not found", 404, ErrorCode.NOT_FOUND);
-  }
-
-  const updated: ServicePincode = {
-    ...existing,
-    ...parsed.data,
-    serviceArea:
-      parsed.data.serviceArea === null
-        ? undefined
-        : (parsed.data.serviceArea ?? existing.serviceArea),
-    updatedAt: nowIso(),
-  };
-
-  mutate((db) => {
-    const index = db.servicePincodes.findIndex((item) => item.id === id);
-    if (index >= 0) db.servicePincodes[index] = updated;
+  const result = await ofoodFetch<unknown>(`/api/v1/pincodes/${id}`, {
+    method: "PUT",
+    accessToken,
+    body: toOfoodWriteBody(parsed.data, existing),
   });
 
-  return jsonOk(updated, { message: "Pincode updated" });
+  if (!result.ok) {
+    return pincodeFailedUpstream(
+      result.status,
+      result.error,
+      result.setCookies,
+      "Unable to update pincode",
+    );
+  }
+
+  const pincode = mapOfoodPincode(result.data);
+  if (!pincode) {
+    return pincodeUnreadable(
+      result.setCookies,
+      "Pincode was updated but the response could not be read.",
+    );
+  }
+
+  return applyUpstreamCookies(
+    jsonOk(pincode, { message: "Pincode updated" }),
+    result.setCookies,
+  );
 }
 
 export async function DELETE(
   request: NextRequest,
-  context: { params: Promise<{ id: string }> },
+  { params }: { params: Promise<{ id: string }> },
 ) {
-  const auth = requireAuth(request);
-  if (isErrorResponse(auth)) return auth;
-  const denied = requirePermission(auth, Permission.PINCODES_DELETE);
-  if (denied) return denied;
+  const accessToken = getRequestAccessToken(request);
+  if (!accessToken) return missingAccessToken();
 
-  const { id } = await context.params;
-  if (!getDb().servicePincodes.some((item) => item.id === id)) {
-    return jsonError("Pincode not found", 404, ErrorCode.NOT_FOUND);
-  }
-
-  mutate((db) => {
-    db.servicePincodes = db.servicePincodes.filter((item) => item.id !== id);
-    for (const person of db.deliveryPersons) {
-      person.pincodeIds = person.pincodeIds.filter((pinId) => pinId !== id);
-    }
+  const { id } = await params;
+  const result = await ofoodFetch<unknown>(`/api/v1/pincodes/${id}`, {
+    method: "DELETE",
+    accessToken,
   });
 
-  return jsonOk({ id }, { message: "Pincode deleted" });
+  if (!result.ok) {
+    return pincodeFailedUpstream(
+      result.status,
+      result.error,
+      result.setCookies,
+      "Unable to delete pincode",
+    );
+  }
+
+  return applyUpstreamCookies(
+    jsonOk({ id }, { message: "Pincode deleted" }),
+    result.setCookies,
+  );
 }

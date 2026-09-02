@@ -141,8 +141,10 @@ export default function AdminCitiesPage() {
     try {
       if (editing) {
         await updateMutation.mutateAsync({ id: editing.id, input: payload });
+        toast.success("City updated");
       } else {
         await createMutation.mutateAsync(payload);
+        toast.success("City created");
       }
       setOpen(false);
     } catch (err) {
