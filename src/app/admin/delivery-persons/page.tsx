@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Modal, ModalFooter } from "@/components/ui/modal";
@@ -33,6 +32,16 @@ import { ApiError } from "@/lib/api/errors";
 import { useToast } from "@/store/useToast";
 import { cn } from "@/lib/utils/cn";
 
+const EMPTY_FORM: CreateDeliveryPersonInput = {
+  firstName: "",
+  lastName: "",
+  mobile: "",
+  vehicleType: VehicleType.BIKE,
+  vehicleNumber: "",
+  status: DeliveryPersonStatus.ACTIVE,
+  pincodeIds: [],
+};
+
 export default function AdminDeliveryPersonsPage() {
   const personsQuery = useDeliveryPersons();
   const citiesQuery = useCities();
@@ -53,28 +62,18 @@ export default function AdminDeliveryPersonsPage() {
 
   const form = useForm<CreateDeliveryPersonInput>({
     resolver: zodResolver(createDeliveryPersonSchema) as never,
-    defaultValues: {
-      fullName: "",
-      mobile: "",
-      email: "",
-      vehicleType: VehicleType.BIKE,
-      vehicleNumber: "",
-      status: DeliveryPersonStatus.ACTIVE,
-      pincodeIds: [],
-      notes: "",
-    },
+    defaultValues: EMPTY_FORM,
   });
 
   const selectedPinIds = form.watch("pincodeIds") ?? [];
 
-  const pinLabelById = useMemo(() => {
+  const pinLabelByKey = useMemo(() => {
     const map = new Map<string, string>();
     for (const pin of pincodesQuery.data ?? []) {
       const city = citiesQuery.data?.find((item) => item.id === pin.cityId);
-      map.set(
-        pin.id,
-        `${pin.pincode}${pin.areaName ? ` · ${pin.areaName}` : ""}${city ? ` (${city.name})` : ""}`,
-      );
+      const label = `${pin.pincode}${pin.areaName ? ` · ${pin.areaName}` : ""}${city ? ` (${city.name})` : ""}`;
+      map.set(pin.id, label);
+      map.set(pin.pincode, label);
     }
     return map;
   }, [pincodesQuery.data, citiesQuery.data]);
@@ -92,8 +91,9 @@ export default function AdminDeliveryPersonsPage() {
       items = items.filter(
         (item) =>
           item.fullName.toLowerCase().includes(q) ||
-          item.mobile.includes(q) ||
-          item.email?.toLowerCase().includes(q),
+          item.firstName.toLowerCase().includes(q) ||
+          item.lastName.toLowerCase().includes(q) ||
+          item.mobile.includes(q),
       );
     }
     return items;
@@ -102,55 +102,58 @@ export default function AdminDeliveryPersonsPage() {
   function openCreate() {
     setEditing(null);
     setError(null);
-    form.reset({
-      fullName: "",
-      mobile: "",
-      email: "",
-      vehicleType: VehicleType.BIKE,
-      vehicleNumber: "",
-      status: DeliveryPersonStatus.ACTIVE,
-      pincodeIds: [],
-      notes: "",
-    });
+    form.reset(EMPTY_FORM);
     setOpen(true);
+  }
+
+  function resolvePincodeIds(values: string[]) {
+    const pins = pincodesQuery.data ?? [];
+    return values.map((value) => {
+      const byId = pins.find((pin) => pin.id === value);
+      if (byId) return byId.id;
+      const byCode = pins.find((pin) => pin.pincode === value);
+      return byCode?.id ?? value;
+    });
   }
 
   function openEdit(person: DeliveryPerson) {
     setEditing(person);
     setError(null);
     form.reset({
-      fullName: person.fullName,
+      firstName: person.firstName,
+      lastName: person.lastName,
       mobile: person.mobile,
-      email: person.email ?? "",
       vehicleType: person.vehicleType,
       vehicleNumber: person.vehicleNumber ?? "",
       status: person.status,
-      pincodeIds: person.pincodeIds,
-      notes: person.notes ?? "",
+      pincodeIds: resolvePincodeIds(person.pincodeIds),
     });
     setOpen(true);
   }
 
-  function togglePincode(id: string) {
+  function togglePincode(id: string, pincode?: string) {
     const current = form.getValues("pincodeIds") ?? [];
-    if (current.includes(id)) {
-      form.setValue(
-        "pincodeIds",
-        current.filter((item) => item !== id),
-        { shouldValidate: true },
-      );
-    } else {
-      form.setValue("pincodeIds", [...current, id], { shouldValidate: true });
-    }
+    const selected =
+      current.includes(id) || (pincode ? current.includes(pincode) : false);
+    const without = current.filter((item) => item !== id && item !== pincode);
+    form.setValue("pincodeIds", selected ? without : [...without, id], {
+      shouldValidate: true,
+    });
   }
 
   async function onSubmit(values: CreateDeliveryPersonInput) {
     setError(null);
+    const payload: CreateDeliveryPersonInput = {
+      ...values,
+      pincodeIds: resolvePincodeIds(values.pincodeIds),
+    };
     try {
       if (editing) {
-        await updateMutation.mutateAsync({ id: editing.id, input: values });
+        await updateMutation.mutateAsync({ id: editing.id, input: payload });
+        toast.success("Delivery person updated");
       } else {
-        await createMutation.mutateAsync(values);
+        await createMutation.mutateAsync(payload);
+        toast.success("Delivery person created");
       }
       setOpen(false);
     } catch (err) {
@@ -193,7 +196,7 @@ export default function AdminDeliveryPersonsPage() {
               key={id}
               className="bg-brand-sand text-brand-ink rounded-full px-2 py-0.5 font-mono text-[11px]"
             >
-              {pinLabelById.get(id)?.split(" · ")[0] ?? id}
+              {pinLabelByKey.get(id)?.split(" · ")[0] ?? id}
             </span>
           ))}
           {row.pincodeIds.length > 4 ? (
@@ -307,17 +310,32 @@ export default function AdminDeliveryPersonsPage() {
         <form className="space-y-3" onSubmit={form.handleSubmit(onSubmit)}>
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label>Full name</Label>
-              <Input {...form.register("fullName")} />
+              <Label>First name</Label>
+              <Input {...form.register("firstName")} />
+              {form.formState.errors.firstName ? (
+                <p className="text-brand-danger text-xs">
+                  {form.formState.errors.firstName.message}
+                </p>
+              ) : null}
             </div>
             <div className="space-y-1.5">
-              <Label>Mobile</Label>
-              <Input {...form.register("mobile")} />
+              <Label>Last name</Label>
+              <Input {...form.register("lastName")} />
+              {form.formState.errors.lastName ? (
+                <p className="text-brand-danger text-xs">
+                  {form.formState.errors.lastName.message}
+                </p>
+              ) : null}
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label>Email</Label>
-            <Input type="email" {...form.register("email")} />
+            <Label>Mobile</Label>
+            <Input {...form.register("mobile")} />
+            {form.formState.errors.mobile ? (
+              <p className="text-brand-danger text-xs">
+                {form.formState.errors.mobile.message}
+              </p>
+            ) : null}
           </div>
           <div className="grid gap-3 sm:grid-cols-3">
             <div className="space-y-1.5">
@@ -361,7 +379,9 @@ export default function AdminDeliveryPersonsPage() {
             </div>
             <div className="max-h-48 space-y-1 overflow-y-auto">
               {selectablePins.map((pin) => {
-                const checked = selectedPinIds.includes(pin.id);
+                const checked =
+                  selectedPinIds.includes(pin.id) ||
+                  selectedPinIds.includes(pin.pincode);
                 return (
                   <label
                     key={pin.id}
@@ -374,7 +394,7 @@ export default function AdminDeliveryPersonsPage() {
                   >
                     <Checkbox
                       checked={checked}
-                      onChange={() => togglePincode(pin.id)}
+                      onChange={() => togglePincode(pin.id, pin.pincode)}
                     />
                     <span>
                       <span className="font-mono font-medium">
@@ -391,11 +411,6 @@ export default function AdminDeliveryPersonsPage() {
                 {form.formState.errors.pincodeIds.message}
               </p>
             ) : null}
-          </div>
-
-          <div className="space-y-1.5">
-            <Label>Notes</Label>
-            <Textarea rows={3} {...form.register("notes")} />
           </div>
 
           {error ? <p className="text-brand-danger text-sm">{error}</p> : null}

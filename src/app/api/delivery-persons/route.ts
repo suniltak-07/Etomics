@@ -1,51 +1,68 @@
 import type { NextRequest } from "next/server";
-import type { DeliveryPerson } from "@/types/entities";
-import { getDb, mutate } from "@/mocks/seed";
-import { Permission } from "@/lib/permissions/permissions";
 import { ErrorCode } from "@/lib/api/errors";
 import {
-  createId,
   isErrorResponse,
   jsonError,
   jsonOk,
-  nowIso,
   parseJsonBody,
-  requireAuth,
-  requirePermission,
 } from "@/lib/api/route-helpers";
+import { applyUpstreamCookies, ofoodFetch } from "@/lib/backend/proxy";
+import { getRequestAccessToken } from "@/lib/backend/session";
+import {
+  deliveryPersonFailedUpstream,
+  deliveryPersonUnreadable,
+  mapOfoodDeliveryPerson,
+  missingAccessToken,
+  toOfoodWriteBody,
+  unwrapOfoodDeliveryPersons,
+} from "@/lib/backend/delivery-persons";
 import { createDeliveryPersonSchema } from "@/features/delivery-persons/schemas/deliveryPersonSchemas";
+import type { DeliveryPerson } from "@/types/entities";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
-  const auth = requireAuth(request);
-  if (isErrorResponse(auth)) return auth;
-  const denied = requirePermission(auth, Permission.DELIVERY_PERSONS_READ);
-  if (denied) return denied;
+  const { searchParams } = request.nextUrl;
+  const accessToken = getRequestAccessToken(request);
 
-  const { searchParams } = new URL(request.url);
+  const result = await ofoodFetch<unknown>("/api/v1/delivery-persons", {
+    accessToken,
+  });
+  if (!result.ok) {
+    return deliveryPersonFailedUpstream(
+      result.status,
+      result.error,
+      result.setCookies,
+      "Unable to load delivery persons",
+    );
+  }
+
+  let items = unwrapOfoodDeliveryPersons(result.data)
+    .map(mapOfoodDeliveryPerson)
+    .filter((item): item is DeliveryPerson => item !== null);
+
   const status = searchParams.get("status") ?? undefined;
-  const search = searchParams.get("search")?.toLowerCase();
+  const search = searchParams.get("search")?.trim().toLowerCase();
 
-  let items = getDb().deliveryPersons;
-  if (status) items = items.filter((item) => item.status === status);
+  if (status) {
+    items = items.filter((item) => item.status === status);
+  }
   if (search) {
     items = items.filter(
       (item) =>
         item.fullName.toLowerCase().includes(search) ||
-        item.mobile.includes(search) ||
-        item.email?.toLowerCase().includes(search),
+        item.firstName.toLowerCase().includes(search) ||
+        item.lastName.toLowerCase().includes(search) ||
+        item.mobile.includes(search),
     );
   }
 
-  return jsonOk(items);
+  return applyUpstreamCookies(jsonOk(items), result.setCookies);
 }
 
 export async function POST(request: NextRequest) {
-  const auth = requireAuth(request);
-  if (isErrorResponse(auth)) return auth;
-  const denied = requirePermission(auth, Permission.DELIVERY_PERSONS_CREATE);
-  if (denied) return denied;
+  const accessToken = getRequestAccessToken(request);
+  if (!accessToken) return missingAccessToken();
 
   const body = await parseJsonBody(request);
   if (isErrorResponse(body)) return body;
@@ -57,33 +74,31 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  const validPins = new Set(getDb().servicePincodes.map((item) => item.id));
-  if (parsed.data.pincodeIds.some((id) => !validPins.has(id))) {
-    return jsonError(
-      "One or more pincodes are invalid",
-      422,
-      ErrorCode.VALIDATION_ERROR,
+  const result = await ofoodFetch<unknown>("/api/v1/delivery-persons", {
+    method: "POST",
+    accessToken,
+    body: toOfoodWriteBody(parsed.data),
+  });
+
+  if (!result.ok) {
+    return deliveryPersonFailedUpstream(
+      result.status,
+      result.error,
+      result.setCookies,
+      "Unable to create delivery person",
     );
   }
 
-  const timestamp = nowIso();
-  const person: DeliveryPerson = {
-    id: createId("dp"),
-    fullName: parsed.data.fullName,
-    mobile: parsed.data.mobile,
-    email: parsed.data.email || undefined,
-    vehicleType: parsed.data.vehicleType,
-    vehicleNumber: parsed.data.vehicleNumber,
-    status: parsed.data.status,
-    pincodeIds: parsed.data.pincodeIds,
-    notes: parsed.data.notes,
-    createdAt: timestamp,
-    updatedAt: timestamp,
-  };
+  const person = mapOfoodDeliveryPerson(result.data);
+  if (!person) {
+    return deliveryPersonUnreadable(
+      result.setCookies,
+      "Delivery person was created but the response could not be read.",
+    );
+  }
 
-  mutate((db) => {
-    db.deliveryPersons.push(person);
-  });
-
-  return jsonOk(person, { status: 201, message: "Delivery person created" });
+  return applyUpstreamCookies(
+    jsonOk(person, { status: 201, message: "Delivery person created" }),
+    result.setCookies,
+  );
 }
