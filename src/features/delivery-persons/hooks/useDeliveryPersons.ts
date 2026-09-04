@@ -20,6 +20,17 @@ export function useDeliveryPersons(params?: {
   });
 }
 
+export function useDeliveryPerson(id: string) {
+  return useQuery({
+    queryKey: ["delivery-persons", id],
+    queryFn: async () => {
+      const res = await deliveryPersonService.get(id);
+      return res.data;
+    },
+    enabled: Boolean(id),
+  });
+}
+
 export function useCreateDeliveryPerson() {
   const qc = useQueryClient();
   return useMutation({

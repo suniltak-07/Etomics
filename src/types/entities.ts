@@ -163,17 +163,16 @@ export interface ServicePincode {
 
 export interface DeliveryPerson {
   id: string;
+  firstName: string;
+  lastName: string;
+  /** Convenience display name from first + last. */
   fullName: string;
   mobile: string;
-  email?: string;
   vehicleType: VehicleType;
   vehicleNumber?: string;
   status: DeliveryPersonStatus;
-  /** Service pincode ids this rider covers */
+  /** Mapped from API `servicePincodes` (ids or codes). */
   pincodeIds: string[];
-  lastLat?: number;
-  lastLng?: number;
-  notes?: string;
   createdAt: string;
   updatedAt: string;
 }
