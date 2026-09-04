@@ -220,11 +220,11 @@ export default function AdminDeliveryPersonsPage() {
           <Button size="sm" variant="outline" onClick={() => openEdit(row)}>
             Edit
           </Button>
-          <Link href={`/admin/delivery-persons/${row.id}/route`}>
+          {/* <Link href={`/admin/delivery-persons/${row.id}/route`}>
             <Button size="sm" variant="outline">
               Route map
             </Button>
-          </Link>
+          </Link> */}
           <Button
             size="sm"
             variant="danger"
