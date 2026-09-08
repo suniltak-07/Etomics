@@ -8,16 +8,18 @@ import {
   Testimonials,
   WhyEatOmics,
 } from "@/portals/customer/components/home";
-import { getFeaturedPlans } from "@/features/plans/services/planServer";
+import { getActivePlans } from "@/features/plans/services/planServer";
 
-export default function HomePage() {
-  const featuredPlans = getFeaturedPlans();
+export const dynamic = "force-dynamic";
+
+export default async function HomePage() {
+  const plans = await getActivePlans();
 
   return (
     <>
       <Hero />
       <WhyEatOmics />
-      <FeaturedPlans plans={featuredPlans} />
+      <FeaturedPlans plans={plans} />
       <HowItWorks />
       <Benefits />
       <Testimonials />

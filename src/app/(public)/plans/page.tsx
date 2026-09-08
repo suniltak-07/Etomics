@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import { PlanCard } from "@/features/plans/components/PlanCard";
+import { EmptyState } from "@/components/states/EmptyState";
 import { getActivePlans } from "@/features/plans/services/planServer";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Meal Plans",
@@ -8,8 +11,8 @@ export const metadata: Metadata = {
     "Browse EatOmics meal subscriptions — breakfast, dinner, diabetic care, and family plans engineered for daily wellness.",
 };
 
-export default function PlansPage() {
-  const plans = getActivePlans();
+export default async function PlansPage() {
+  const plans = await getActivePlans();
 
   return (
     <div className="bg-brand-sand">
@@ -27,11 +30,18 @@ export default function PlansPage() {
       </section>
 
       <section className="px-4 py-16 sm:px-6 lg:px-8">
-        <div className="mx-auto grid max-w-6xl gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {plans.map((plan) => (
-            <PlanCard key={plan.id} plan={plan} />
-          ))}
-        </div>
+        {plans.length === 0 ? (
+          <EmptyState
+            title="No plans available"
+            description="Active meal plans will appear here as soon as they are published."
+          />
+        ) : (
+          <div className="mx-auto grid max-w-6xl gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {plans.map((plan) => (
+              <PlanCard key={plan.id} plan={plan} />
+            ))}
+          </div>
+        )}
       </section>
     </div>
   );

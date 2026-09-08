@@ -1,9 +1,10 @@
 import { api } from "@/lib/api/client";
 import { API_ENDPOINTS } from "@/lib/api/endpoints";
 import type { ApiResponse, ListParams, PaginatedResponse } from "@/types/api";
-import type { Customer, CustomerPreferences } from "@/types/entities";
+import type { CustomerPreferences } from "@/types/entities";
+import type { PublicCustomer } from "@/lib/backend/customers";
 
-export type PublicCustomer = Omit<Customer, "password">;
+export type { PublicCustomer };
 
 export type CustomerListParams = ListParams;
 

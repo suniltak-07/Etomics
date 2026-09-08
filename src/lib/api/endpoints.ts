@@ -119,6 +119,9 @@ export const API_ENDPOINTS = {
   kitchen: {
     list: resource("/kitchen"),
   },
+  media: {
+    upload: resource("/media/upload"),
+  },
 } as const;
 
 export type ApiEndpoints = typeof API_ENDPOINTS;

@@ -36,3 +36,8 @@ export interface OfoodRegistrationResponse {
 export interface OfoodMessageResponse {
   message?: string;
 }
+
+export interface OfoodMediaUploadResponse {
+  url: string;
+  key: string;
+}

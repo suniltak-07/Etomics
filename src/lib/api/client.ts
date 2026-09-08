@@ -105,6 +105,10 @@ async function rotateAccessToken(
   return refreshInFlight;
 }
 
+function isFormData(value: unknown): value is FormData {
+  return typeof FormData !== "undefined" && value instanceof FormData;
+}
+
 function isBrowser(): boolean {
   return typeof window !== "undefined";
 }
@@ -251,7 +255,10 @@ export class ApiClient {
       extra.forEach((value, key) => headers.set(key, value));
     }
 
-    if (body !== undefined && !headers.has("Content-Type")) {
+    const formData = isFormData(body);
+    if (formData) {
+      headers.delete("Content-Type");
+    } else if (body !== undefined && !headers.has("Content-Type")) {
       headers.set("Content-Type", "application/json");
     }
 
@@ -266,7 +273,12 @@ export class ApiClient {
       response = await this.fetchImpl(url, {
         method,
         headers,
-        body: body === undefined ? undefined : JSON.stringify(body),
+        body:
+          body === undefined
+            ? undefined
+            : formData
+              ? (body as FormData)
+              : JSON.stringify(body),
         signal: options.signal,
         credentials: "include",
       });

@@ -1,30 +1,45 @@
 import type { NextRequest } from "next/server";
-import { getDb } from "@/mocks/seed";
-import { Permission } from "@/lib/permissions/permissions";
 import {
-  isErrorResponse,
   jsonPaginated,
   paginate,
   parsePagination,
-  requireAuth,
-  requirePermission,
-  stripPassword,
 } from "@/lib/api/route-helpers";
+import { applyUpstreamCookies, ofoodFetch } from "@/lib/backend/proxy";
+import { getRequestAccessToken } from "@/lib/backend/session";
+import {
+  customerFailedUpstream,
+  mapOfoodCustomer,
+  missingAccessToken,
+  unwrapOfoodCustomers,
+  type PublicCustomer,
+} from "@/lib/backend/customers";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
-  const auth = requireAuth(request);
-  if (isErrorResponse(auth)) return auth;
+  const accessToken = getRequestAccessToken(request);
+  if (!accessToken) return missingAccessToken();
 
-  const denied = requirePermission(auth, Permission.CUSTOMERS_READ);
-  if (denied) return denied;
+  const result = await ofoodFetch<unknown>("/api/v1/customers", {
+    accessToken,
+  });
+  if (!result.ok) {
+    return customerFailedUpstream(
+      result.status,
+      result.error,
+      result.setCookies,
+      "Unable to load customers",
+    );
+  }
 
-  const { searchParams } = new URL(request.url);
-  const { page, pageSize } = parsePagination(searchParams);
-  const search = searchParams.get("search")?.trim().toLowerCase();
+  let customers = unwrapOfoodCustomers(result.data)
+    .map(mapOfoodCustomer)
+    .filter((customer): customer is PublicCustomer => customer !== null);
 
-  let customers = getDb().customers;
+  const search = request.nextUrl.searchParams
+    .get("search")
+    ?.trim()
+    .toLowerCase();
   if (search) {
     customers = customers.filter((customer) => {
       const haystack = [
@@ -39,7 +54,7 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  const sanitized = customers.map((customer) => stripPassword(customer));
-  const { items, meta } = paginate(sanitized, page, pageSize);
-  return jsonPaginated(items, meta);
+  const { page, pageSize } = parsePagination(request.nextUrl.searchParams);
+  const { items, meta } = paginate(customers, page, pageSize);
+  return applyUpstreamCookies(jsonPaginated(items, meta), result.setCookies);
 }

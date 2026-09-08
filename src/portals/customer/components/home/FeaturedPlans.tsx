@@ -7,6 +7,7 @@ export interface FeaturedPlansProps {
 }
 
 export function FeaturedPlans({ plans }: FeaturedPlansProps) {
+  console.log("plans", plans);
   return (
     <section className="bg-brand-surface px-4 py-20 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-6xl">
@@ -29,9 +30,13 @@ export function FeaturedPlans({ plans }: FeaturedPlansProps) {
         </div>
 
         <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {plans.map((plan) => (
-            <PlanCard key={plan.id} plan={plan} />
-          ))}
+          {plans.length === 0 ? (
+            <p className="text-brand-muted col-span-full text-sm">
+              Active meal plans will appear here as soon as they are published.
+            </p>
+          ) : (
+            plans.map((plan) => <PlanCard key={plan.id} plan={plan} />)
+          )}
         </div>
       </div>
     </section>

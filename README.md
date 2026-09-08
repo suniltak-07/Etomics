@@ -11,7 +11,7 @@ Meal subscription platform for wellness-focused meal plans. Customers browse pla
 - **Vitest** + Testing Library for unit tests
 - **Playwright** for e2e smoke tests
 - In-memory mock data layer (`src/mocks/seed.ts`) for catalog/checkout until those APIs are wired
-- **OFOOD** backend for authentication (`https://ofood-backend.onrender.com`)
+- **OFOOD** backend for authentication (`http://ofood-alb-604405684.ap-south-1.elb.amazonaws.com`)
 
 ## Getting started
 
@@ -30,8 +30,8 @@ Copy `.env.example` to `.env.local` to configure environments:
 # NEXT_PUBLIC_API_BASE_URL=http://localhost:3000
 # NEXT_PUBLIC_API_BASE_URL=https://your-dev-app.vercel.app
 
-# Upstream OFOOD (server-only proxy target)
-OFOOD_API_BASE_URL=https://ofood-backend.onrender.com
+# Upstream OFOOD (server-only proxy target; same ALB for dev and prod for now)
+OFOOD_API_BASE_URL=http://ofood-alb-604405684.ap-south-1.elb.amazonaws.com
 ```
 
 ## Authentication

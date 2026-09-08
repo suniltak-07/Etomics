@@ -13,7 +13,11 @@ import {
   ofoodErrorResponse,
   ofoodFetch,
 } from "@/lib/backend/proxy";
-import { mapOfoodPlan, toOfoodUpdateBody } from "@/lib/backend/plans";
+import {
+  fetchActiveOfoodPlans,
+  mapOfoodPlan,
+  toOfoodUpdateBody,
+} from "@/lib/backend/plans";
 import { getRequestAccessToken } from "@/lib/backend/session";
 import { rolesFromJwt } from "@/lib/backend/jwt";
 import { isAdminBackendRole } from "@/lib/backend/roles";
@@ -62,7 +66,24 @@ export async function GET(
   const accessToken = getRequestAccessToken(request);
   const admin = isAdminRequest(request);
 
-  const result = await loadPlan(id, accessToken, admin);
+  if (!admin) {
+    const { result, plans } = await fetchActiveOfoodPlans();
+    if (!result.ok) {
+      return failedUpstream(
+        result.status,
+        result.error,
+        result.setCookies,
+        "Plan not found",
+      );
+    }
+    const plan = plans.find((item) => item.id === id);
+    if (!plan) {
+      return jsonError("Plan not found", 404, ErrorCode.NOT_FOUND);
+    }
+    return applyUpstreamCookies(jsonOk(plan), result.setCookies);
+  }
+
+  const result = await loadPlan(id, accessToken, true);
   if (!result.ok) {
     return failedUpstream(
       result.status,

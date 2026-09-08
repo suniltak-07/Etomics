@@ -12,6 +12,10 @@ export interface OfoodRequestOptions {
   signal?: AbortSignal;
 }
 
+function isFormData(value: unknown): value is FormData {
+  return typeof FormData !== "undefined" && value instanceof FormData;
+}
+
 export interface OfoodResult<T> {
   ok: boolean;
   status: number;
@@ -124,8 +128,9 @@ export async function ofoodFetch<T = unknown>(
 ): Promise<OfoodResult<T>> {
   const url = `${getOfoodBaseUrl()}${path.startsWith("/") ? path : `/${path}`}`;
   const headers = new Headers({ Accept: "application/json" });
+  const formData = isFormData(options.body);
 
-  if (options.body !== undefined) {
+  if (options.body !== undefined && !formData) {
     headers.set("Content-Type", "application/json");
   }
   if (options.accessToken) {
@@ -141,7 +146,11 @@ export async function ofoodFetch<T = unknown>(
       method: options.method ?? "GET",
       headers,
       body:
-        options.body === undefined ? undefined : JSON.stringify(options.body),
+        options.body === undefined
+          ? undefined
+          : formData
+            ? (options.body as FormData)
+            : JSON.stringify(options.body),
       signal: options.signal,
       cache: "no-store",
     });
