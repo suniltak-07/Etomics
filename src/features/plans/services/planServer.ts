@@ -1,27 +1,26 @@
-import { getDb } from "@/mocks/seed";
 import type { Plan } from "@/types/entities";
-import { PlanStatus } from "@/types/enums";
+import { fetchActiveOfoodPlans } from "@/lib/backend/plans";
 
-function sortByDisplayOrder(a: Plan, b: Plan) {
-  return a.displayOrder - b.displayOrder;
+export async function getActivePlans(): Promise<Plan[]> {
+  const { plans } = await fetchActiveOfoodPlans();
+  return plans;
 }
 
-export function getActivePlans(): Plan[] {
-  const db = getDb();
-  return db.plans
-    .filter((plan) => plan.status === PlanStatus.ACTIVE)
-    .sort(sortByDisplayOrder);
+export async function getFeaturedPlans(): Promise<Plan[]> {
+  const plans = await getActivePlans();
+  const featured = plans.filter((plan) => plan.isFeatured);
+  return featured.length ? featured : plans;
 }
 
-export function getFeaturedPlans(): Plan[] {
-  return getActivePlans().filter((plan) => plan.isFeatured);
-}
-
-export function getPlanBySlug(slug: string): Plan | undefined {
+export async function getPlanBySlug(slug: string): Promise<Plan | undefined> {
   const normalized = slug.trim().toLowerCase();
-  return getDb().plans.find((plan) => plan.slug.toLowerCase() === normalized);
+  if (!normalized) return undefined;
+  const plans = await getActivePlans();
+  return plans.find((plan) => plan.slug.toLowerCase() === normalized);
 }
 
-export function getPlanById(id: string): Plan | undefined {
-  return getDb().plans.find((plan) => plan.id === id);
+export async function getPlanById(id: string): Promise<Plan | undefined> {
+  if (!id.trim()) return undefined;
+  const plans = await getActivePlans();
+  return plans.find((plan) => plan.id === id);
 }

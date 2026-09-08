@@ -14,6 +14,15 @@ import {
   requirePermission,
   stripPassword,
 } from "@/lib/api/route-helpers";
+import { applyUpstreamCookies, ofoodFetch } from "@/lib/backend/proxy";
+import { getRequestAccessToken } from "@/lib/backend/session";
+import {
+  customerFailedUpstream,
+  mapOfoodCustomer,
+  missingAccessToken,
+  unwrapOfoodCustomers,
+  type PublicCustomer,
+} from "@/lib/backend/customers";
 import { UserRole } from "@/types/enums";
 
 export const dynamic = "force-dynamic";
@@ -22,22 +31,50 @@ export async function GET(
   request: NextRequest,
   context: { params: Promise<{ id: string }> },
 ) {
-  const auth = requireAuth(request);
-  if (isErrorResponse(auth)) return auth;
+  const accessToken = getRequestAccessToken(request);
+  if (!accessToken) return missingAccessToken();
 
   const { id } = await context.params;
-  const isSelf = auth.id === id && auth.role === UserRole.CUSTOMER;
-  if (!isSelf) {
-    const denied = requirePermission(auth, Permission.CUSTOMERS_READ);
-    if (denied) return denied;
+
+  const byId = await ofoodFetch<unknown>(`/api/v1/customers/${id}`, {
+    accessToken,
+  });
+  if (byId.ok) {
+    const customer = mapOfoodCustomer(byId.data);
+    if (customer) {
+      return applyUpstreamCookies(jsonOk(customer), byId.setCookies);
+    }
   }
 
-  const customer = getDb().customers.find((item) => item.id === id);
-  if (!customer) {
-    return jsonError("Customer not found", 404, ErrorCode.NOT_FOUND);
+  const list = await ofoodFetch<unknown>("/api/v1/customers", { accessToken });
+  if (list.ok) {
+    const customer = unwrapOfoodCustomers(list.data)
+      .map(mapOfoodCustomer)
+      .find((item): item is PublicCustomer => item?.id === id);
+    if (customer) {
+      return applyUpstreamCookies(jsonOk(customer), list.setCookies);
+    }
   }
 
-  return jsonOk(stripPassword(customer));
+  const me = await ofoodFetch<unknown>("/api/v1/auth/me", { accessToken });
+  if (me.ok) {
+    const self = mapOfoodCustomer(me.data);
+    if (self?.id === id) {
+      return applyUpstreamCookies(jsonOk(self), me.setCookies);
+    }
+  }
+
+  if (byId.status === 401 || list.status === 401) {
+    const failed = byId.status === 401 ? byId : list;
+    return customerFailedUpstream(
+      failed.status,
+      failed.error,
+      failed.setCookies,
+      "Unable to load customer",
+    );
+  }
+
+  return jsonError("Customer not found", 404, ErrorCode.NOT_FOUND);
 }
 
 export async function PATCH(

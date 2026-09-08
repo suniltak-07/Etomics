@@ -32,6 +32,8 @@ import {
 import { HoverTooltip } from "@/components/ui/hover-tooltip";
 import { useToast } from "@/store/useToast";
 import { SetPlanInactiveButton } from "@/portals/admin/components/SetPlanInactiveButton";
+import { ImageUploadField } from "@/features/media/components/ImageUploadField";
+import { StringListField } from "@/features/plans/components/StringListField";
 
 const SECTIONS = [
   { id: "basic", label: "Basic" },
@@ -118,13 +120,6 @@ function planToFormValues(plan?: Plan): PlanEditFormInput {
     seoTitle: plan.seoTitle ?? "",
     seoDescription: plan.seoDescription ?? "",
   };
-}
-
-function linesToArray(value: string): string[] {
-  return value
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
 }
 
 export function PlanCreateForm() {
@@ -216,8 +211,14 @@ export function PlanForm({
   const toast = useToast();
   const didToastCreate = useRef(false);
   const [section, setSection] = useState<SectionId>("basic");
+  const [mediaBusyCount, setMediaBusyCount] = useState(0);
   const updateMutation = useUpdatePlan(planId ?? "");
   const locked = isActivePlan(initialPlan?.status);
+  const mediaUploading = mediaBusyCount > 0;
+
+  const handleMediaBusy = (busy: boolean) => {
+    setMediaBusyCount((count) => Math.max(0, count + (busy ? 1 : -1)));
+  };
 
   const defaults = useMemo(() => planToFormValues(initialPlan), [initialPlan]);
 
@@ -449,35 +450,31 @@ export function PlanForm({
           {section === "benefits" ? (
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-1.5">
-                <Label htmlFor="features">Features (one per line)</Label>
+                <Label htmlFor="features">Features</Label>
                 <Controller
                   control={control}
                   name="features"
                   render={({ field }) => (
-                    <Textarea
+                    <StringListField
                       id="features"
-                      rows={6}
-                      value={(field.value ?? []).join("\n")}
-                      onChange={(event) =>
-                        field.onChange(linesToArray(event.target.value))
-                      }
+                      value={field.value ?? []}
+                      onChange={field.onChange}
+                      placeholder="Add a feature"
                     />
                   )}
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="ingredients">Ingredients (one per line)</Label>
+                <Label htmlFor="ingredients">Ingredients</Label>
                 <Controller
                   control={control}
                   name="ingredients"
                   render={({ field }) => (
-                    <Textarea
+                    <StringListField
                       id="ingredients"
-                      rows={6}
-                      value={(field.value ?? []).join("\n")}
-                      onChange={(event) =>
-                        field.onChange(linesToArray(event.target.value))
-                      }
+                      value={field.value ?? []}
+                      onChange={field.onChange}
+                      placeholder="Add an ingredient"
                     />
                   )}
                 />
@@ -486,10 +483,22 @@ export function PlanForm({
           ) : null}
 
           {section === "media" ? (
-            <div className="grid gap-4">
+            <div className="grid gap-6">
               <div className="space-y-1.5">
-                <Label htmlFor="image">Primary image URL</Label>
-                <Input id="image" {...register("image")} />
+                <Label>Primary image</Label>
+                <Controller
+                  control={control}
+                  name="image"
+                  render={({ field }) => (
+                    <ImageUploadField
+                      value={field.value ? [field.value] : []}
+                      onChange={(urls) => field.onChange(urls[0] ?? "")}
+                      disabled={locked}
+                      emptyLabel="Upload a primary image"
+                      onBusyChange={handleMediaBusy}
+                    />
+                  )}
+                />
                 {errors.image ? (
                   <p className="text-brand-danger text-xs">
                     {errors.image.message}
@@ -497,21 +506,25 @@ export function PlanForm({
                 ) : null}
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="gallery">Gallery URLs (one per line)</Label>
+                <Label>Gallery</Label>
                 <Controller
                   control={control}
                   name="gallery"
                   render={({ field }) => (
-                    <Textarea
-                      id="gallery"
-                      rows={4}
-                      value={(field.value ?? []).join("\n")}
-                      onChange={(event) =>
-                        field.onChange(linesToArray(event.target.value))
-                      }
+                    <ImageUploadField
+                      multiple
+                      value={field.value ?? []}
+                      onChange={field.onChange}
+                      disabled={locked}
+                      emptyLabel="Upload gallery images"
+                      onBusyChange={handleMediaBusy}
                     />
                   )}
                 />
+                <p className="text-brand-muted text-xs">
+                  Images upload to storage immediately. Save media to keep them
+                  on this plan.
+                </p>
               </div>
             </div>
           ) : null}
@@ -604,8 +617,12 @@ export function PlanForm({
             </span>
           </HoverTooltip>
         ) : (
-          <Button type="submit" disabled={isSubmitting}>
-            {isSubmitting ? "Saving…" : `Save ${tabLabel.toLowerCase()}`}
+          <Button type="submit" disabled={isSubmitting || mediaUploading}>
+            {isSubmitting
+              ? "Saving…"
+              : mediaUploading
+                ? "Uploading…"
+                : `Save ${tabLabel.toLowerCase()}`}
           </Button>
         )}
         <Button

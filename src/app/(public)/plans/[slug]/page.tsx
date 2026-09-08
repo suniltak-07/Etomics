@@ -4,23 +4,18 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Check } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import {
-  getActivePlans,
-  getPlanBySlug,
-} from "@/features/plans/services/planServer";
+import { getPlanBySlug } from "@/features/plans/services/planServer";
 import { WellnessNotice } from "@/components/brand/WellnessNotice";
 import { calculateTrialPrice } from "@/lib/pricing/pricingEngine";
 import { formatCurrency } from "@/lib/utils/format";
 
-export async function generateStaticParams() {
-  return getActivePlans().map((plan) => ({ slug: plan.slug }));
-}
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata({
   params,
 }: PageProps<"/plans/[slug]">): Promise<Metadata> {
   const { slug } = await params;
-  const plan = getPlanBySlug(slug);
+  const plan = await getPlanBySlug(slug);
   if (!plan) {
     return { title: "Plan not found" };
   }
@@ -34,7 +29,7 @@ export default async function PlanDetailPage({
   params,
 }: PageProps<"/plans/[slug]">) {
   const { slug } = await params;
-  const plan = getPlanBySlug(slug);
+  const plan = await getPlanBySlug(slug);
   if (!plan) notFound();
 
   const subscribeHref = `/customer/checkout?planId=${encodeURIComponent(plan.id)}`;
@@ -43,14 +38,16 @@ export default async function PlanDetailPage({
   return (
     <div className="bg-brand-sand">
       <section className="bg-brand-navy relative isolate min-h-[55vh] overflow-hidden text-white">
-        <Image
-          src={plan.image}
-          alt={plan.name}
-          fill
-          priority
-          sizes="100vw"
-          className="object-cover"
-        />
+        {plan.image ? (
+          <Image
+            src={plan.image}
+            alt={plan.name}
+            fill
+            priority
+            sizes="100vw"
+            className="object-cover"
+          />
+        ) : null}
         <div className="from-brand-navy/90 via-brand-navy/70 to-brand-navy/40 absolute inset-0 bg-gradient-to-r" />
         <div className="relative mx-auto flex min-h-[55vh] max-w-6xl flex-col justify-end px-4 py-16 sm:px-6 lg:px-8">
           <div className="animate-fade-up max-w-2xl space-y-4">

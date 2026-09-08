@@ -1,5 +1,6 @@
 import type { NutritionInfo, Plan, PlanMeal } from "@/types/entities";
 import { DurationUnit, MealType, PlanStatus } from "@/types/enums";
+import { ofoodFetch, type OfoodResult } from "@/lib/backend/proxy";
 
 type ClearableNumber = number | null | undefined;
 
@@ -55,7 +56,12 @@ function asString(value: unknown, fallback = ""): string {
 }
 
 function asNumber(value: unknown, fallback = 0): number {
-  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return fallback;
 }
 
 function asBoolean(value: unknown, fallback = false): boolean {
@@ -79,8 +85,10 @@ function asStringArray(value: unknown): string[] {
 
 function unwrapPayload(payload: unknown): unknown {
   if (Array.isArray(payload) || !isRecord(payload)) return payload;
-  if ("id" in payload && typeof payload.id === "string") return payload;
+  if (Array.isArray(payload.content)) return payload.content;
+  if (Array.isArray(payload.plans)) return payload.plans;
   if ("data" in payload) return unwrapPayload(payload.data);
+  if ("id" in payload && typeof payload.id === "string") return payload;
   return payload;
 }
 
@@ -92,6 +100,23 @@ export function unwrapOfoodPlans(payload: unknown): unknown[] {
 export function unwrapOfoodPlan(payload: unknown): unknown {
   const unwrapped = unwrapPayload(payload);
   return isRecord(unwrapped) ? unwrapped : null;
+}
+
+export async function fetchActiveOfoodPlans(): Promise<{
+  result: OfoodResult<unknown>;
+  plans: Plan[];
+}> {
+  const result = await ofoodFetch<unknown>("/api/v1/plans");
+  const plans = result.ok
+    ? unwrapOfoodPlans(result.data)
+        .map(mapOfoodPlan)
+        .filter((plan): plan is Plan => plan !== null)
+        .sort(
+          (a, b) =>
+            a.displayOrder - b.displayOrder || a.name.localeCompare(b.name),
+        )
+    : [];
+  return { result, plans };
 }
 
 function mapMealType(value: unknown): MealType {

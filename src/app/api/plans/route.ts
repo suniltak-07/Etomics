@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
 
   const result = await ofoodFetch<unknown>(
     admin ? "/api/v1/plans/all" : "/api/v1/plans",
-    { accessToken },
+    admin ? { accessToken } : {},
   );
 
   if (!result.ok) {

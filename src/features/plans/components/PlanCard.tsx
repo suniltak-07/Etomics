@@ -34,13 +34,15 @@ export function PlanCard({
       )}
     >
       <div className="bg-brand-sand relative aspect-[4/3] overflow-hidden">
-        <Image
-          src={plan.image}
-          alt={plan.name}
-          fill
-          sizes="(max-width: 768px) 100vw, 33vw"
-          className="object-cover transition duration-500 group-hover:scale-[1.03]"
-        />
+        {plan.image ? (
+          <Image
+            src={plan.image}
+            alt={plan.name}
+            fill
+            sizes="(max-width: 768px) 100vw, 33vw"
+            className="object-cover transition duration-500 group-hover:scale-[1.03]"
+          />
+        ) : null}
         {plan.isFeatured ? (
           <Badge className="absolute top-3 left-3" variant="default">
             Featured
